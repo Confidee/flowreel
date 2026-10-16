@@ -14,6 +14,10 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   "flowreel <version>" with an install line and the version's
   `CHANGELOG.md` section as its notes (`scripts/release-notes.mjs`, with
   unit tests). A release that already exists is left unchanged.
+- A 76-second narrated demo video at the top of the README, recorded with
+  flowreel 0.2.0 from npm. The video, its thumbnail and the run's report
+  are in `assets/demo/`; the leak tripwire allows the publisher's name in
+  that demo's README and run report only.
 
 ### Changed
 

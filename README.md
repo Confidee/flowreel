@@ -22,6 +22,12 @@ you three things:
 You record the flow once and get the regression test, the release evidence
 and the demo or training video from it.
 
+https://github.com/user-attachments/assets/20bc4bce-5bbb-41f6-89c2-beca76e2eb05
+
+<sub>A 76-second demo, sound on: flowreel records one flow of a small demo
+app, narrated, with a caption and a verdict per step. The video, its
+thumbnail and the run's report are in [assets/demo](assets/demo/README.md).</sub>
+
 > **Status: 0.x** (APIs may still change between minor versions). The APIs
 > described here are the ones in
 > the code today, including the `rails-inertia` and `mail-graph` adapters

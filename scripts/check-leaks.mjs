@@ -41,8 +41,10 @@
 //   - the security and conduct contact address, in SECURITY.md and
 //     CODE_OF_CONDUCT.md only (CONTACT_FILES);
 // - the publisher's name, and only that (project patterns still apply):
-//   in README.md's "## Who uses it" section, and in this script and the
-//   tripwire spec, which test the publisher tokens.
+//   in README.md's "## Who uses it" section, in this script and the
+//   tripwire spec, which test the publisher tokens, and in the publisher's
+//   own demo (assets/demo/README.md and the run report
+//   assets/demo/run/summary.md).
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { dirname, join, relative, resolve, sep } from "node:path"
@@ -105,12 +107,14 @@ function withoutPublisher(file, line) {
 }
 
 /**
- * Files that test the publisher tokens: the publisher's name is allowed in
- * them, every project pattern still applies.
+ * Files that test the publisher tokens, and the publisher's own demo: the
+ * publisher's name is allowed in them, every project pattern still applies.
  */
 const FILE_ALLOW = new Map([
   ["scripts/check-leaks.mjs", new Set([PUBLISHER_NAME])],
   ["runtime/test/tripwire.spec.ts", new Set([PUBLISHER_NAME])],
+  ["assets/demo/README.md", new Set([PUBLISHER_NAME])],
+  ["assets/demo/run/summary.md", new Set([PUBLISHER_NAME])],
 ])
 
 /** README.md's "## Who uses it" section may name the publisher, nothing else. */

@@ -172,6 +172,18 @@ test("the tripwire's own files are scanned: the publisher's name only is allowed
   ])
 })
 
+test("the publisher's demo names the publisher, in those two files only", () => {
+  for (const demo of ["assets/demo/README.md", "assets/demo/run/summary.md"]) {
+    expect(violations(demo, "# Confidee demo app: PASS", SAMPLE)).toEqual([])
+    expect(violations(demo, "see widgetry", SAMPLE)).toEqual([
+      `${demo}:1: a project pattern (#1)`,
+    ])
+  }
+  expect(violations("assets/demo/other.md", "Confidee demo app")).toEqual([
+    "assets/demo/other.md:1: the publisher's name",
+  ])
+})
+
 test("the whole repository is scanned and brand-neutral", () => {
   const files = scannedFiles()
   expect(files.length).toBeGreaterThan(100)
