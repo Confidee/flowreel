@@ -22,6 +22,8 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   the video on the project README (npm does not play videos); it appears
   on npm with the next release. Its logo is now the full mint logo (the
   symbol and the name, 320 px wide) instead of the small symbol alone.
+- Badges under the logo in the README and the npm page: npm version, CI,
+  license, Node and Claude Code plugin.
 
 ### Changed
 

@@ -1,5 +1,7 @@
 <img alt="flowreel" src="https://raw.githubusercontent.com/Confidee/flowreel/main/assets/brand/flowreel-mint-horizontal-light.svg" width="320">
 
+[![npm version](https://img.shields.io/npm/v/@confidee/flowreel)](https://www.npmjs.com/package/@confidee/flowreel) [![CI](https://github.com/Confidee/flowreel/actions/workflows/ci.yml/badge.svg)](https://github.com/Confidee/flowreel/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/npm/l/@confidee/flowreel)](https://github.com/Confidee/flowreel/blob/main/LICENSE) [![Node >= 20](https://img.shields.io/node/v/@confidee/flowreel)](https://github.com/Confidee/flowreel/blob/main/docs/getting-started.md#1-prerequisites) [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-0F8A7E)](https://github.com/Confidee/flowreel/blob/main/docs/plugin.md)
+
 # @confidee/flowreel
 
 The flowreel runtime: deterministic Playwright flows that double as

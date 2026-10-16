@@ -5,6 +5,14 @@
   </picture>
 </h1>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@confidee/flowreel"><img alt="npm version" src="https://img.shields.io/npm/v/@confidee/flowreel"></a>
+  <a href="https://github.com/Confidee/flowreel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Confidee/flowreel/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/npm/l/@confidee/flowreel"></a>
+  <a href="docs/getting-started.md#1-prerequisites"><img alt="Node >= 20" src="https://img.shields.io/node/v/@confidee/flowreel"></a>
+  <a href="docs/plugin.md"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude_Code-plugin-0F8A7E"></a>
+</p>
+
 **Playwright flows that are both your release gate and your narrated product videos.**
 
 flowreel takes plain-English feature plans and turns them into deterministic
