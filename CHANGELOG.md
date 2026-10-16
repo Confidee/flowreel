@@ -9,6 +9,10 @@ uses [Semantic Versioning](https://semver.org/) (0.x while pre-release).
 ### Changed
 
 - CI can also be started by hand (Actions -> CI -> Run workflow).
+- Dependabot no longer proposes major versions of `typescript` (TypeScript
+  7 has no JavaScript compiler API, which the tour scanner uses) or
+  `@types/node` (the type definitions follow the supported Node versions,
+  raised on purpose). Minor and patch updates still arrive.
 
 ## [0.2.0] - 2026-10-16
 
