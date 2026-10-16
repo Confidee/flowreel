@@ -5,6 +5,14 @@
   </picture>
 </h1>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@confidee/flowreel"><img alt="npm version" src="https://img.shields.io/npm/v/@confidee/flowreel"></a>
+  <a href="https://github.com/Confidee/flowreel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Confidee/flowreel/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/npm/l/@confidee/flowreel"></a>
+  <a href="docs/getting-started.md#1-prerequisites"><img alt="Node >= 20" src="https://img.shields.io/node/v/@confidee/flowreel"></a>
+  <a href="docs/plugin.md"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude_Code-plugin-0F8A7E"></a>
+</p>
+
 **Playwright flows that are both your release gate and your narrated product videos.**
 
 flowreel takes plain-English feature plans and turns them into deterministic
@@ -21,6 +29,12 @@ you three things:
 
 You record the flow once and get the regression test, the release evidence
 and the demo or training video from it.
+
+https://github.com/user-attachments/assets/20bc4bce-5bbb-41f6-89c2-beca76e2eb05
+
+<sub>A 76-second demo, sound on: flowreel records one flow of a small demo
+app, narrated, with a caption and a verdict per step. The video, its
+thumbnail and the run's report are in [assets/demo](assets/demo/README.md).</sub>
 
 > **Status: 0.x** (APIs may still change between minor versions). The APIs
 > described here are the ones in

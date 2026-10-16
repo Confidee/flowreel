@@ -10,3 +10,6 @@ flowreel-results/
 flowreel-demos/
 .flowreel/
 coverage/
+
+# A flowreel run report, kept exactly as flowreel wrote it
+assets/demo/run/

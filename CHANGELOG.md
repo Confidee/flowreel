@@ -14,6 +14,16 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   "flowreel <version>" with an install line and the version's
   `CHANGELOG.md` section as its notes (`scripts/release-notes.mjs`, with
   unit tests). A release that already exists is left unchanged.
+- A 76-second narrated demo video at the top of the README, recorded with
+  flowreel 0.2.0 from npm. The video, its thumbnail and the run's report
+  are in `assets/demo/`; the leak tripwire allows the publisher's name in
+  that demo's README and run report only.
+- The npm page (the runtime README) shows the demo's thumbnail, linked to
+  the video on the project README (npm does not play videos); it appears
+  on npm with the next release. Its logo is now the full mint logo (the
+  symbol and the name, 320 px wide) instead of the small symbol alone.
+- Badges under the logo in the README and the npm page: npm version, CI,
+  license, Node and Claude Code plugin.
 
 ### Changed
 
