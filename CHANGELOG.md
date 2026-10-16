@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/) (0.x while pre-release).
 
 ## [Unreleased]
 
+### Added
+
+- The release workflow creates the GitHub Release after the npm publish:
+  a third job (`github-release`, the only one that can write to the
+  repository, and it never sees the npm token) titles it
+  "flowreel <version>" with an install line and the version's
+  `CHANGELOG.md` section as its notes (`scripts/release-notes.mjs`, with
+  unit tests). A release that already exists is left unchanged.
+
 ### Changed
 
 - CI can also be started by hand (Actions -> CI -> Run workflow).

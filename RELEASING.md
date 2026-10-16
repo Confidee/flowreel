@@ -20,14 +20,20 @@ first release. Maintainers only.
   `npm run check:version -- v<version>` (at the repository root) checks it
   against a tag.
 - **A tag publishes.** Pushing a tag `v<version>` runs
-  [.github/workflows/release.yml](.github/workflows/release.yml) in two
+  [.github/workflows/release.yml](.github/workflows/release.yml) in three
   jobs. `build` (no OIDC token) refuses a tag whose commit is not on
   `main`, checks the tag against every version, installs the runtime's dev
   dependencies with `npm ci --ignore-scripts`, runs the typecheck, tests,
   build and export smoke test, and packs the tarball, recording its
   SHA-256. `publish` checks out nothing and installs no dependencies: it
   downloads that tarball, checks its SHA-256 and runs
-  `npm publish <tarball> --provenance --access public`.
+  `npm publish <tarball> --provenance --access public`. After npm accepts
+  it, `github-release` (the only job that can write to the repository, and
+  it never sees the npm token) creates the GitHub Release for the tag, with
+  an install line and the version's `CHANGELOG.md` section as its notes
+  (`scripts/release-notes.mjs`; preview them with
+  `node scripts/release-notes.mjs v<version>`). A release that already
+  exists is left unchanged.
 - **No npm token.** Only the `publish` job can request an OIDC token
   (`permissions: id-token: write`); it authenticates with npm trusted
   publishing on Node 24, with its bundled npm when that is 11.5.1 or later
@@ -88,8 +94,9 @@ first release. Maintainers only.
    The package page on npmjs.com shows a "Provenance" section that names
    this repository and the workflow run.
 
-8. Create a GitHub release for the tag with the changelog section as its
-   notes.
+8. Check that the workflow created the GitHub Release (the repository's
+   Releases page, marked Latest). Edit its notes there if you want to add
+   anything.
 
 If the release workflow fails before `npm publish`, fix the problem on
 `main`, delete the tag (`git push origin :refs/tags/v<version>` and
