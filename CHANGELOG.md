@@ -18,6 +18,8 @@ uses [Semantic Versioning](https://semver.org/) (0.x while pre-release).
 ### Changed
 
 - CI can also be started by hand (Actions -> CI -> Run workflow).
+- README: install from npm (`@confidee/flowreel` is published); a clone
+  is only for trying an unreleased change.
 - Dependabot no longer proposes major versions of `typescript` (TypeScript
   7 has no JavaScript compiler API, which the tour scanner uses) or
   `@types/node` (the type definitions follow the supported Node versions,
