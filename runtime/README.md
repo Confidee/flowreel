@@ -5,6 +5,11 @@
 The flowreel runtime: deterministic Playwright flows that double as
 narrated, branded videos, with a development-then-staging release gate.
 
+[![Watch the 76-second flowreel demo (sound on)](https://raw.githubusercontent.com/Confidee/flowreel/main/assets/demo/flowreel-demo-thumbnail.jpg)](https://github.com/Confidee/flowreel#readme)
+
+<sub>Watch the 76-second demo, sound on, at the top of the
+[project README](https://github.com/Confidee/flowreel#readme).</sub>
+
 > Status: 0.x; APIs may change between minor versions. See the
 > [project README](https://github.com/Confidee/flowreel#readme) and the
 > [docs](https://github.com/Confidee/flowreel/tree/main/docs).
