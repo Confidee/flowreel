@@ -2,7 +2,7 @@
 #
 # Publishes @confidee/flowreel to npm when a tag v<version> is pushed.
 #
-# Two jobs, so the OIDC token can be minted only where nothing but the
+# Three jobs, so the OIDC token can be minted only where nothing but the
 # publish runs:
 # - `build` (no id-token): checks that the tagged commit is on main and the
 #   tag matches every version, installs the dev dependencies without their
@@ -12,6 +12,9 @@
 #   reviewers): no checkout and no dependency install. It downloads the
 #   tarball, checks its SHA-256 against the build job's, and publishes
 #   that file.
+# - `github-release` (contents: write, after the publish): creates the
+#   GitHub Release for the tag, with the notes from CHANGELOG.md
+#   (scripts/release-notes.mjs). An existing release is left unchanged.
 #
 # npm trusted publishing (OIDC): no NPM_TOKEN secret exists or is used. npm
 # accepts the publish only when its trusted-publisher settings for the
@@ -149,3 +152,43 @@ jobs:
         env:
           TARBALL: ${{ needs.build.outputs.tarball }}
         run: npm publish "./$TARBALL" --provenance --access public
+
+  github-release:
+    name: Create the GitHub Release
+    # Only after npm accepted the publish, so a GitHub Release always names
+    # a version that exists on npm.
+    needs: publish
+    if: github.repository == 'Confidee/flowreel'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The only job that can write to the repository, and only to create the
+    # release; it never sees the npm OIDC token.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Release notes from CHANGELOG.md
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+
+      # An existing release (made by hand, or by a re-run) is left as it is.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "The release $TAG already exists; left unchanged."
+            exit 0
+          fi
+          gh release create "$TAG" --verify-tag --title "flowreel ${TAG#v}" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          echo "GitHub Release [$TAG](https://github.com/$GH_REPO/releases/tag/$TAG) created." >> "$GITHUB_STEP_SUMMARY"
