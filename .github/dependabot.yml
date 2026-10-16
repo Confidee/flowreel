@@ -25,6 +25,16 @@ updates:
     ignore:
       # The runtime installed into the example from ../../runtime.
       - dependency-name: "@confidee/flowreel"
+      # TypeScript 7 (the native compiler) has no JavaScript compiler API,
+      # which the tour scanner (runtime/src/tour/scan.ts) uses; move to it
+      # once the scanner supports it.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # The Node type definitions follow the Node versions the package
+      # supports (engines, CI), not the newest Node: newer types allow APIs
+      # an older supported Node lacks. Raise them on purpose, together.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
