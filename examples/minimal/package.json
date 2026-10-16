@@ -24,6 +24,6 @@
     "@confidee/flowreel": "file:../../runtime",
     "@playwright/test": "^1.64.0",
     "@types/node": "^24.0.0",
-    "typescript": "^6.0.0"
+    "typescript": "^7.0.2"
   }
 }
