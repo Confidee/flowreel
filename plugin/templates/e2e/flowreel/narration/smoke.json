@@ -1,0 +1,9 @@
+{
+  "_comment": "Spoken narration for the smoke round trip. Keys: intro, outro.pass / outro.fail / outro.n/a / outro, step codes (S1, S2), <step code>.email for an email card. Placeholders: {COUNT} {PASSED} {FAILED}. Never ids, addresses, links, record numbers or tokens.",
+  "intro": "This is the smoke round trip: the path every release has to pass.",
+  "outro.pass": "Every step passed.",
+  "outro.fail": "This run failed: {PASSED} of {COUNT} steps passed. The summary names the step that broke.",
+  "outro": "{PASSED} of {COUNT} steps passed.",
+  "S1": "The user opens the app and lands on the home page.",
+  "S2": "The user searches, and the results page answers."
+}

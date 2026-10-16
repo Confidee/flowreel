@@ -1,0 +1,23 @@
+{
+  "name": "flowreel",
+  "owner": {
+    "name": "Confidee GmbH"
+  },
+  "metadata": {
+    "description": "The flowreel Claude Code plugin: deterministic Playwright flows that double as narrated, branded videos."
+  },
+  "plugins": [
+    {
+      "name": "flowreel",
+      "source": "./plugin",
+      "description": "Turn plain-English feature plans into deterministic Playwright flows that double as narrated, branded videos, gated development-then-staging.",
+      "version": "0.2.0",
+      "author": {
+        "name": "Feti Jashari"
+      },
+      "homepage": "https://github.com/Confidee/flowreel",
+      "repository": "https://github.com/Confidee/flowreel",
+      "license": "Apache-2.0"
+    }
+  ]
+}

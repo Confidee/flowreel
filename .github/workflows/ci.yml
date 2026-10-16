@@ -1,0 +1,133 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# CI for every push to main and every pull request: the runtime (typecheck,
+# leak tripwire + unit tests, build, export smoke test), the plugin's
+# templates, the minimal example end to end at qa pace, formatting, and
+# `claude plugin validate --strict` for the plugin and the marketplace.
+#
+# Actions are pinned to full commit SHAs (the comment names the release);
+# Dependabot keeps them current.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Runtime, templates and example (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 20 is end-of-life (2026-04-30) and tested as best effort
+        # only (SECURITY.md, "Supported versions"); 22 and 24 are LTS, 26
+        # is the current release.
+        node: [20, 22, 24, 26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            runtime/package-lock.json
+            examples/minimal/package-lock.json
+
+      # The runtime: the leak tripwire over the whole repository runs first
+      # inside `npm run test:coverage`, then the browser-free unit tests under
+      # c8, which fails the step below 95% (runtime/.c8rc.json).
+      - name: Runtime - install
+        working-directory: runtime
+        run: npm ci
+      - name: Runtime - typecheck
+        working-directory: runtime
+        run: npm run typecheck
+      - name: Runtime - test (leak tripwire, unit tests, coverage gate)
+        working-directory: runtime
+        env:
+          # The project patterns for the leak tripwire (see
+          # scripts/check-leaks.mjs); empty on forks and when unset.
+          FLOWREEL_LEAK_PATTERNS: ${{ secrets.FLOWREEL_LEAK_PATTERNS }}
+        run: npm run test:coverage
+      - name: Runtime - build
+        working-directory: runtime
+        run: npm run build
+      - name: Runtime - every entry point loads with import and require
+        working-directory: runtime
+        run: npm run smoke:exports
+
+      # Both scaffold shapes /flowreel:init writes, typechecked against the
+      # runtime source, with their unit suites.
+      - name: Plugin - template check
+        run: bash plugin/scripts/check-templates.sh
+
+      # The example installs the runtime built above as a copy
+      # (install-links=true in its .npmrc), so this step comes after the build.
+      - name: Example - install
+        working-directory: examples/minimal
+        run: npm ci
+      - name: Example - typecheck
+        working-directory: examples/minimal
+        run: npm run typecheck
+      - name: Example - Chromium and ffmpeg
+        working-directory: examples/minimal
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -hide_banner -encoders | grep -E 'libx264|aac'
+      # Narration is off on Linux (the only shipped voice is macOS `say`),
+      # so the videos are silent; the verdict is the same.
+      - name: Example - flows at qa pace
+        working-directory: examples/minimal
+        run: npm run test:qa
+
+  format:
+    name: Formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run check:leaks
+        env:
+          FLOWREEL_LEAK_PATTERNS: ${{ secrets.FLOWREEL_LEAK_PATTERNS }}
+
+  plugin:
+    name: Plugin and marketplace validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # The published Claude Code CLI, pinned. `plugin validate` reads the
+      # manifests only: it needs no sign-in and no API key.
+      - name: claude plugin validate --strict ./plugin
+        run: npx --yes @anthropic-ai/claude-code@2.1.301 plugin validate --strict ./plugin
+      - name: claude plugin validate --strict . (the marketplace)
+        run: npx --yes @anthropic-ai/claude-code@2.1.301 plugin validate --strict .

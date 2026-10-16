@@ -1,0 +1,7 @@
+{
+  "_comment": "Every string the smoke round trip types or sends. Placeholders: {RUN_ID} and any {NAME} the flow passes. Keep anything your project scans for (forbidden vocabulary, real addresses) out of here.",
+  "subjects": {},
+  "bodies": {
+    "searchTerm": "QA {RUN_ID}"
+  }
+}

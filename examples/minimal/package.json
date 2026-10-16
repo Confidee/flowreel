@@ -1,0 +1,29 @@
+{
+  "name": "flowreel-example-minimal",
+  "version": "0.2.0",
+  "private": true,
+  "description": "The quickest way to see flowreel work: a tiny notes app, three flows and a narrated video.",
+  "license": "Apache-2.0",
+  "author": "Feti Jashari",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Confidee/flowreel.git",
+    "directory": "examples/minimal"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "app": "node app/server.mjs",
+    "test": "playwright test",
+    "test:qa": "FLOWREEL_PACE=qa playwright test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@confidee/flowreel": "file:../../runtime",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.0"
+  }
+}

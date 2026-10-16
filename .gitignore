@@ -1,0 +1,25 @@
+# Installed packages and build output
+node_modules/
+runtime/dist/
+*.tsbuildinfo
+
+# Test output
+test-results/
+playwright-report/
+
+# Run evidence (traces, videos, HTML report: credential-bearing) and demos
+flowreel-results/
+flowreel-demos/
+# The voice clip cache
+.flowreel/
+
+# Local environment and secrets files never belong in the repository
+.env
+.env.*
+!*.example
+
+# OS files
+.DS_Store
+
+# Coverage reports (runtime: npm run test:coverage)
+coverage/

@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Weekly updates for the npm dev dependencies (the runtime, the example and
+# the repository's formatter) and for the pinned GitHub Actions. The runtime
+# has no runtime dependencies; @playwright/test is a peer dependency the
+# consuming project chooses.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /runtime
+      - /examples/minimal
+    schedule:
+      interval: weekly
+    # Wait a week before proposing a newly published version, so a
+    # compromised release is more likely to be caught and pulled first.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        update-types: [minor, patch]
+    ignore:
+      # The runtime installed into the example from ../../runtime.
+      - dependency-name: "@confidee/flowreel"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        update-types: [minor, patch]

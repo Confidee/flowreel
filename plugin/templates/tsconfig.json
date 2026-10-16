@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "@confidee/flowreel": ["../../runtime/src/index.ts"],
+      "@confidee/flowreel/core": ["../../runtime/src/core/index.ts"],
+      "@confidee/flowreel/mail": ["../../runtime/src/mail/index.ts"],
+      "@confidee/flowreel/video": ["../../runtime/src/video/index.ts"],
+      "@confidee/flowreel/voice": ["../../runtime/src/voice/index.ts"],
+      "@confidee/flowreel/reporter": ["../../runtime/src/reporter/index.ts"],
+      "@confidee/flowreel/demos": ["../../runtime/src/demos/index.ts"],
+      "@confidee/flowreel/config": ["../../runtime/src/config/index.ts"],
+      "@confidee/flowreel/app": ["../../runtime/src/app/index.ts"],
+      "@confidee/flowreel/run": ["../../runtime/src/run/index.ts"],
+      "@confidee/flowreel/pipeline": ["../../runtime/src/pipeline/index.ts"],
+      "@confidee/flowreel/tour": ["../../runtime/src/tour/index.ts"],
+      "@confidee/flowreel/cli": ["../../runtime/src/cli/index.ts"],
+      "@confidee/flowreel/rails-inertia": [
+        "../../runtime/src/rails-inertia/index.ts"
+      ],
+      "@confidee/flowreel/mail-graph": ["../../runtime/src/mail-graph/index.ts"]
+    }
+  },
+  "include": ["./**/*.ts"]
+}

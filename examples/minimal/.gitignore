@@ -1,0 +1,7 @@
+node_modules/
+# Run evidence (traces, videos, HTML report: credential-bearing) and demos
+flowreel-results/
+flowreel-demos/
+# The voice clip cache
+.flowreel/
+test-results/

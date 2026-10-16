@@ -1,0 +1,12 @@
+# Installed packages, build output, lockfiles
+node_modules/
+runtime/dist/
+package-lock.json
+
+# Test and run output (credential-bearing run evidence included)
+test-results/
+playwright-report/
+flowreel-results/
+flowreel-demos/
+.flowreel/
+coverage/

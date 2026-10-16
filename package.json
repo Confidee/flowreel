@@ -1,0 +1,20 @@
+{
+  "name": "flowreel-repository",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository-level tooling for flowreel: formatting and the leak tripwire. The package itself is runtime/.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:leaks": "node scripts/check-leaks.mjs",
+    "check:version": "node scripts/check-version.mjs"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  }
+}

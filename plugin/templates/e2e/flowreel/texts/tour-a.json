@@ -1,0 +1,5 @@
+{
+  "_comment": "Tour area A: every string its flows send or type, read with areaText(\"A\", key, vars) from tour.ts. Placeholders: {RUN_ID} (always filled in) and any {NAME} the flow passes in vars (an unknown one throws).",
+  "subjects": {},
+  "bodies": {}
+}

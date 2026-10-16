@@ -1,0 +1,14 @@
+{
+  "all": true,
+  "src": ["src"],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.d.ts"],
+  "reporter": ["text-summary", "json-summary", "html"],
+  "report-dir": "coverage",
+  "temp-directory": "coverage/.tmp",
+  "check-coverage": true,
+  "lines": 95,
+  "statements": 95,
+  "functions": 95,
+  "branches": 95
+}

@@ -1,0 +1,21 @@
+{
+  "_comment": "Spoken narration for tour area A. Keys: area (area intro), outro (area scoreboard), a feature id (its title card), a step code (its caption). Placeholders: {COUNT} {PASSED} {FAILED}. Never speak ids, addresses, links or tokens. A step without a line is said as its title.",
+  "area": "Area A is the notes app itself. These {COUNT} features cover writing a note, a setting an admin shares with everyone, and deleting a note.",
+  "outro": "That is the notes area: {PASSED} of {COUNT} features passed.",
+
+  "A1": "Creating a note. The list, the form and the note's own page have to work together.",
+  "A1.1": "The editor opens the list of the team's notes.",
+  "A1.2": "They write a new note: a title and a short body, then save it.",
+  "A1.3": "The new note opens on its own page, exactly as it was written.",
+  "A1.4": "Back on the list, a search finds the new note and nothing else.",
+
+  "A2": "The workspace greeting. An admin's setting reaches everyone, so the tour puts it back afterwards.",
+  "A2.1": "The admin opens the workspace settings.",
+  "A2.2": "They save a new greeting. Before that, the tour wrote down the old one, so it can always be restored.",
+  "A2.3": "The editor sees the new greeting at the top of the notes list.",
+  "A2.4": "The tour puts the original greeting back, checks it, and the list shows it again.",
+
+  "A3": "Deleting a note. This runs on development only, because a deleted note cannot come back.",
+  "A3.1": "The editor opens a note they no longer need.",
+  "A3.2": "Deleting it returns to the list, which confirms it and no longer shows the note."
+}

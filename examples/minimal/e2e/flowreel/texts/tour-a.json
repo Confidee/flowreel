@@ -1,0 +1,11 @@
+{
+  "subjects": {
+    "newNote": "Weekly plan",
+    "oldNote": "Old draft",
+    "greeting": "Good morning from the {RUN_ID} tour."
+  },
+  "bodies": {
+    "newNote": "Ship the release on Thursday, then plan the next sprint.",
+    "oldNote": "Notes for a meeting that was cancelled."
+  }
+}

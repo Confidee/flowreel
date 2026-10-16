@@ -1,0 +1,17 @@
+{
+  "description": "flowreel: a fast, read-only prerequisite check at session start. It prints one line per missing tool (required, video-only or voice-only) with its install command, runs every tool from / and never runs a version-manager shim, installs nothing, never blocks and always exits 0. Silent outside projects that use flowreel; FLOWREEL_PREREQS=off silences it.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/check-prereqs.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

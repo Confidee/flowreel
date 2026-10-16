@@ -1,0 +1,7 @@
+{
+  "_comment": "Spoken narration for tour area A. Keys: area, outro, feature ids (title card), step codes (or a full step title when it differs per target), <code>.email for an email card. Placeholders: {COUNT} {PASSED} {FAILED}. Never ids, addresses, links, record numbers or tokens.",
+  "area": "Area A shows how a user gets around. These {COUNT} features cover the first minutes in the app.",
+  "outro": "That is getting around: {PASSED} of {COUNT} features passed.",
+  "A1": "The home page. Everyone starts here, so it has to open quickly and clearly.",
+  "A1.1": "The user opens the app and sees the home page's main heading."
+}

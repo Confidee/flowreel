@@ -1,0 +1,138 @@
+{
+  "name": "@confidee/flowreel",
+  "version": "0.2.0",
+  "description": "Deterministic Playwright flows that double as narrated, branded videos, with a development-then-staging release gate.",
+  "license": "Apache-2.0",
+  "author": "Feti Jashari",
+  "homepage": "https://github.com/Confidee/flowreel#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Confidee/flowreel.git",
+    "directory": "runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/Confidee/flowreel/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js",
+      "default": "./dist/core/index.js"
+    },
+    "./mail": {
+      "types": "./dist/mail/index.d.ts",
+      "import": "./dist/mail/index.js",
+      "default": "./dist/mail/index.js"
+    },
+    "./video": {
+      "types": "./dist/video/index.d.ts",
+      "import": "./dist/video/index.js",
+      "default": "./dist/video/index.js"
+    },
+    "./voice": {
+      "types": "./dist/voice/index.d.ts",
+      "import": "./dist/voice/index.js",
+      "default": "./dist/voice/index.js"
+    },
+    "./reporter": {
+      "types": "./dist/reporter/index.d.ts",
+      "import": "./dist/reporter/index.js",
+      "default": "./dist/reporter/index.js"
+    },
+    "./demos": {
+      "types": "./dist/demos/index.d.ts",
+      "import": "./dist/demos/index.js",
+      "default": "./dist/demos/index.js"
+    },
+    "./config": {
+      "types": "./dist/config/index.d.ts",
+      "import": "./dist/config/index.js",
+      "default": "./dist/config/index.js"
+    },
+    "./app": {
+      "types": "./dist/app/index.d.ts",
+      "import": "./dist/app/index.js",
+      "default": "./dist/app/index.js"
+    },
+    "./run": {
+      "types": "./dist/run/index.d.ts",
+      "import": "./dist/run/index.js",
+      "default": "./dist/run/index.js"
+    },
+    "./pipeline": {
+      "types": "./dist/pipeline/index.d.ts",
+      "import": "./dist/pipeline/index.js",
+      "default": "./dist/pipeline/index.js"
+    },
+    "./tour": {
+      "types": "./dist/tour/index.d.ts",
+      "import": "./dist/tour/index.js",
+      "default": "./dist/tour/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js",
+      "default": "./dist/cli/index.js"
+    },
+    "./rails-inertia": {
+      "types": "./dist/rails-inertia/index.d.ts",
+      "import": "./dist/rails-inertia/index.js",
+      "default": "./dist/rails-inertia/index.js"
+    },
+    "./mail-graph": {
+      "types": "./dist/mail-graph/index.d.ts",
+      "import": "./dist/mail-graph/index.js",
+      "default": "./dist/mail-graph/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node ../scripts/check-leaks.mjs && playwright test --config=playwright.config.ts",
+    "test:coverage": "node ../scripts/check-leaks.mjs && c8 playwright test --config=playwright.config.ts",
+    "check:leaks": "node ../scripts/check-leaks.mjs",
+    "smoke:exports": "node scripts/smoke-exports.mjs",
+    "check": "npm run typecheck && npm run test:coverage && npm run build && npm run smoke:exports"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.56"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24.0.0",
+    "c8": "^12.0.0",
+    "typescript": "^6.0.0"
+  },
+  "keywords": [
+    "playwright",
+    "e2e",
+    "qa",
+    "release-gate",
+    "video",
+    "narration",
+    "demo"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
