@@ -5,7 +5,7 @@ development stage can sign a persona in without the password form, read
 the mail the app sent, run queued jobs now and deliver inbound mail. They
 speak the protocol of `HttpSeamMailDriver` and `seamSignIn` from
 `@confidee/flowreel/rails-inertia` (the protocol is in
-[docs/adapters.md](../../../docs/adapters.md#the-seam-protocol)).
+[docs/adapters.md](https://github.com/Confidee/flowreel/blob/main/docs/adapters.md#the-seam-protocol)).
 
 Staging never uses them: the routes do not exist there, and the staging
 stage signs in through the real form and reads a real mailbox.

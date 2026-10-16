@@ -5,17 +5,18 @@
 The flowreel runtime: deterministic Playwright flows that double as
 narrated, branded videos, with a development-then-staging release gate.
 
-> Status: 0.x, pre-release. See the
+> Status: 0.x; APIs may change between minor versions. See the
 > [project README](https://github.com/Confidee/flowreel#readme) and the
 > [docs](https://github.com/Confidee/flowreel/tree/main/docs).
 
 - ESM, Node >= 20, peer dependency `@playwright/test` >= 1.56, no other
   runtime dependencies.
-- Loads with `import` everywhere, and with `require()` on Node 20.19+ or
-  22.12+ (require of ES modules). Playwright compiles a project's test
+- Loads with `import` everywhere, and with `require()` on Node 20.19+,
+  22.12+ or 23+ (require of ES modules). Playwright compiles a project's test
   files to CommonJS unless its package.json has `"type": "module"`, so on
   older Node set `"type": "module"` in the consuming project.
-- Entry points: `@confidee/flowreel` (everything below), `/core`,
+- Entry points: `@confidee/flowreel` (everything below except `/reporter`,
+  `/demos` and the two adapters), `/core`,
   `/mail`, `/video`, `/voice`, `/cli`, `/config` (defineConfig, target
   allowlist with a loopback-only local host, secrets file, createConfig),
   `/app` (AppAdapter, personas, sign-in/out, keepalive), `/run` (run ids,
@@ -23,11 +24,14 @@ narrated, branded videos, with a development-then-staging release gate.
   now), `/pipeline` (the development -> staging gate, DbIsolation, runner)
   and `/tour` (TourManifest, feature(), catalogue tripwire, tourFixtures(),
   tourModuleFrom()), `/reporter` (SummaryReporter, ModuleDescriptor, the
-  status rules) and `/demos` (DemoCatalogue, demoPublisher); adapters on `/rails-inertia` (InertiaPropsReader,
-  seamSignIn, HttpSeamMailDriver, DEFAULT_SEAM_PATHS) and `/mail-graph`
-  (GraphMailDriver). `/tour`'s static tripwire takes the
-  project's own `typescript` module as an argument (typed structurally), so
-  neither the runtime nor its published types depend on it.
+  status rules) and `/demos` (DemoCatalogue, demoPublisher); adapters on
+  `/rails-inertia` (InertiaPropsReader, seamSignIn, HttpSeamMailDriver,
+  DEFAULT_SEAM_PATHS) and `/mail-graph` (GraphMailDriver). `/tour`'s static
+  tripwire takes the project's own `typescript` module as an argument
+  (typed structurally), so neither the runtime nor its published types
+  depend on it. The scanner supports TypeScript 5.x and 6.x; TypeScript 7
+  is not supported yet
+  ([issue #6](https://github.com/Confidee/flowreel/issues/6)).
 
 ## Develop
 

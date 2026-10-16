@@ -14,7 +14,7 @@ import { narrationProblems, stepTitles } from "./narration-keys"
 //     so a policy cannot drift from what the owner approved;
 //   - every area's narration (narration/tour-<letter>.json) has its frame
 //     lines, a line per feature and per step, and no stale key.
-// With `typescript` installed, scanAreaSpec() / checkDeclaredFeatures()
+// With `typescript` 5.x or 6.x installed, scanAreaSpec() / checkDeclaredFeatures()
 // from @confidee/flowreel/tour also check each test() starts with
 // feature() and nothing skips outside it.
 

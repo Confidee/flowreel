@@ -46,7 +46,7 @@ you hear nothing within 3 business days, write again by the other route.
 
 ## Supported versions
 
-flowreel is pre-release (0.x). Only the **latest released 0.x version**
+flowreel is at 0.x. Only the **latest released 0.x version**
 receives security fixes; a fix ships as a new 0.x release, not as a patch
 to an older one. Please upgrade before reporting.
 

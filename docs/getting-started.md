@@ -406,9 +406,9 @@ tour, reporter) for a tiny static app with no Rails, without the pipeline
 entry: it runs with `npx playwright test`.
 
 1. **Install:** `npm install --save-dev @confidee/flowreel @playwright/test tsx`,
-   then `npx playwright install chromium`. Until the runtime is on a
-   registry, install it from a checkout as a copy, never a plain link
-   (see the [README](../README.md#without-the-plugin)).
+   then `npx playwright install chromium`. To try an unreleased change,
+   install the runtime from a clone as a copy, never a plain link (see the
+   [README](../README.md#without-the-plugin)).
 2. **`flowreel.config.ts`:** `defineConfig()` with your targets, modules,
    personas, secrets and results folder
    ([Configuration](configuration.md#defineconfig-reference)).

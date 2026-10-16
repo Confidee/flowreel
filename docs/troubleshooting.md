@@ -174,6 +174,11 @@ feature was development-only. N/A is not a pass.
 **Exit 4, `UNDO FAILED, manual action needed`**
 See [Undo and cleanup](#undo-and-cleanup). This outranks every other code.
 
+**Exit 130, `INCOMPLETE` (interrupted)**
+Ctrl-C stopped the pipeline before a stage that would have run. It is never
+a pass. Run again. See
+[Interrupting a run](pipeline-and-gates.md#interrupting-a-run).
+
 **`no summary written (playwright exited 1)`**
 The stage died before its reporter ran: a crash in global setup (a sign-in,
 `prepareLocal`), a config error, or the process was killed. Read the
@@ -261,6 +266,11 @@ an ES module only on Node 20.19+ (20.x), 22.12+ (22.x) or 23 and later
 (never on 21). Upgrade Node (preferred), or set `"type": "module"` if you
 accept that it changes how every `.js` file in your project loads.
 `/flowreel:doctor` reports which case you are in.
+
+**`TypeError: ts.createSourceFile is not a function` (or similar) from the tour scanner**
+Your project has TypeScript 7, which has no JavaScript compiler API. The
+scanner supports TypeScript 5.x and 6.x. Use TypeScript 6 for the project,
+or wait for [issue #6](https://github.com/Confidee/flowreel/issues/6).
 
 **`Requiring @playwright/test second time`**
 Two copies of `@playwright/test` are loaded. The usual cause is a runtime

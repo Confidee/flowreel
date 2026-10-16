@@ -315,7 +315,7 @@ const fmtSeconds = (sec: number) => sec.toFixed(1)
 
 /**
  * Runs the pipeline for `argv` and returns the exit code (0/1/2/3/4, 64
- * for bad arguments). Never throws for a stage failure; a crash of the
+ * for bad arguments, 130 interrupted). Never throws for a stage failure; a crash of the
  * runner itself rejects.
  */
 export async function runPipeline<

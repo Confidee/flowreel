@@ -16,8 +16,9 @@ import type { TourManifest } from "./manifest.js"
 // published .d.ts never imports `typescript` either.
 
 /**
- * The TypeScript compiler API, i.e. `import ts from "typescript"` (any 5.x
- * or later), passed in by the project. Typed structurally on purpose.
+ * The TypeScript compiler API, i.e. `import ts from "typescript"` (TypeScript
+ * 5.x or 6.x; TypeScript 7 has no JavaScript compiler API, see
+ * https://github.com/Confidee/flowreel/issues/6), passed in by the project. Typed structurally on purpose.
  */
 export interface TypeScriptApi {
   createSourceFile: (...args: never[]) => unknown

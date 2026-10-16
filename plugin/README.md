@@ -1,7 +1,7 @@
 # flowreel Claude Code plugin
 
 Skills, agents and a prerequisite check around the
-[`@confidee/flowreel`](../runtime/) runtime: set a project up, inventory
+[`@confidee/flowreel`](https://www.npmjs.com/package/@confidee/flowreel) runtime: set a project up, inventory
 its features, author flows from plans, narrate them, run the
 development -> staging gate and explain the result.
 
@@ -45,8 +45,8 @@ To try it from a clone without installing: `claude --plugin-dir plugin`
 
 Hook: `SessionStart` (on startup) runs
 [scripts/check-prereqs.sh](scripts/check-prereqs.sh): read-only, about half
-a second, silent unless the project uses flowreel (a `flowreel.config.ts`,
-an `e2e/flowreel/` folder or the `@confidee/flowreel` dependency), then
+a second, silent unless the project uses flowreel (a `flowreel.config.ts` or
+`e2e/flowreel.config.ts`, an `e2e/flowreel/` folder or the `@confidee/flowreel` dependency), then
 one line per missing item with its install command: required (Node.js,
 `@playwright/test`, Chromium), `video-only` (ffmpeg, ffprobe) or
 `voice-only` (macOS `say`, a Premium voice), and a last line pointing at
