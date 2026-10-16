@@ -14,6 +14,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run by hand from the Actions tab (Run workflow), e.g. after a settings
+  # change or to re-check main.
+  workflow_dispatch:
 
 permissions:
   contents: read

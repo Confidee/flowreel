@@ -6,6 +6,10 @@ uses [Semantic Versioning](https://semver.org/) (0.x while pre-release).
 
 ## [Unreleased]
 
+### Changed
+
+- CI can also be started by hand (Actions -> CI -> Run workflow).
+
 ## [0.2.0] - 2026-10-16
 
 First public release, from the public repository and to the npm registry.
