@@ -1,4 +1,4 @@
-<img alt="" src="https://raw.githubusercontent.com/Confidee/flowreel/main/assets/brand/flowreel-mint-symbol-light.svg" width="56" height="56">
+<img alt="flowreel" src="https://raw.githubusercontent.com/Confidee/flowreel/main/assets/brand/flowreel-mint-horizontal-light.svg" width="320">
 
 # @confidee/flowreel
 

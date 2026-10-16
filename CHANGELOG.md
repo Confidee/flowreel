@@ -20,7 +20,8 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   that demo's README and run report only.
 - The npm page (the runtime README) shows the demo's thumbnail, linked to
   the video on the project README (npm does not play videos); it appears
-  on npm with the next release.
+  on npm with the next release. Its logo is now the full mint logo (the
+  symbol and the name, 320 px wide) instead of the small symbol alone.
 
 ### Changed
 
