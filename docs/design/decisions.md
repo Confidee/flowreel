@@ -250,7 +250,9 @@ and records its SHA-256. The publish job checks out nothing, verifies the
 tarball against that SHA-256 and runs
 `npm publish <tarball> --provenance --access public` with
 `id-token: write`. There is no `NPM_TOKEN` secret. The job runs in the `npm`
-GitHub environment, which can require a second person's approval.
+GitHub environment, which can require a second person's approval. After
+npm accepts the publish, a third job (`contents: write`, without the OIDC
+token) creates the GitHub Release with the version's changelog section.
 
 **Why.** No long-lived token can leak. Provenance links every version to
 the workflow run and commit that built it, and the version is published by
