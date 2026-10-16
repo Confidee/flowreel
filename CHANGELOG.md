@@ -6,6 +6,12 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-16
+
+Documentation and release tooling only; the runtime's behaviour is
+unchanged. The npm page now shows the logo, badges and the demo video's
+thumbnail.
+
 ### Added
 
 - The release workflow creates the GitHub Release after the npm publish:
@@ -246,5 +252,6 @@ plugin with its marketplace entry, the docs and the Rails seam kit.
   [docs/plugin.md](docs/plugin.md) listing it, and instructions injected
   into the model's context through the session-start check's output.
 
-[Unreleased]: https://github.com/Confidee/flowreel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Confidee/flowreel/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Confidee/flowreel/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Confidee/flowreel/releases/tag/v0.2.0
