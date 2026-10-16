@@ -170,7 +170,7 @@ export const NOTES_TOUR_VIDEO: TourVideoConfig = {
  * The reporter takes exactly one round-trip module (a release-gate flow in
  * one project). This example has only the tour, so its gate names a
  * project the config does not define: it never runs, and the run's verdict
- * is the tour's. A known 0.1 limitation: remove this once the reporter
+ * is the tour's. A known 0.x limitation: remove this once the reporter
  * accepts a tour without a round trip.
  */
 export const NOTES_GATE: RoundTripModule = {

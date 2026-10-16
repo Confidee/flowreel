@@ -1,12 +1,12 @@
 # Releasing flowreel
 
 How a version of `@confidee/flowreel` and the `flowreel` plugin is
-published, and the one-time setup the repository and npm need before the
-first release. Maintainers only.
+published, and the one-time setup the repository and npm needed for the
+first release (done for 0.2.0). Maintainers only.
 
 - [How a release works](#how-a-release-works)
 - [Cutting a release](#cutting-a-release)
-- [Before the first release](#before-the-first-release)
+- [One-time setup (done for 0.2.0)](#one-time-setup-done-for-020)
 - [Open documentation checks](#open-documentation-checks)
 
 ## How a release works
@@ -103,7 +103,7 @@ If the release workflow fails before `npm publish`, fix the problem on
 `git tag -d v<version>`) and tag again. Once a version is on npm it cannot
 be published again: fix forward with the next patch version.
 
-## Before the first release
+## One-time setup (done for 0.2.0)
 
 These steps need the owner, or the GitHub and npm web interfaces. None of
 them can be done from this repository's files.
@@ -113,8 +113,7 @@ them can be done from this repository's files.
 - The first public version is **0.2.0**. 0.1.0 was an internal release
   that was never published to npm; skipping it keeps an internal install
   and the public package from sharing a version number. The changelog
-  keeps the 0.1.0 section as history. If the release slips past the date
-  in the `## [0.2.0]` heading, update the date before tagging.
+  keeps the 0.1.0 section as history.
 
 ### GitHub repository settings
 
@@ -198,43 +197,28 @@ owners who are different people.
   access -> **"Require two-factor authentication and disallow tokens"**.
   Trusted publishing keeps working.
 
-**What we do not know:** whether npmjs.com lets you create a trusted
-publisher for a package name that has never been published (the
-documentation does not say; the CLI says no), and exactly which account
-details npm shows on a manually published version. Our understanding is
-that a version published from a personal login records that npm account
-(name and, in the registry metadata, its email) as the publisher; verify
-with `npm view @confidee/flowreel@<version> _npmUser` after the first
-publish.
+**What happened for 0.2.0.** `npm trust` documents that the package must
+already exist, and the website's trusted-publisher form is on the
+package's own Settings page, so route A was used (configuring a trusted
+publisher for a name that was never published was not tried):
 
-**So the first publish most likely needs one manual step.** Two ways:
+1. A 0.0.1 placeholder was published by hand to create the package name.
+   While npm reviewed the new package (about 2 minutes), its page showed
+   a `0.0.0-stage` holding version, which stays in the version list.
+2. The trusted publisher was then created on the package's Settings page
+   (`Confidee/flowreel` / `release.yml` / environment `npm`, publish
+   allowed). It requires the package to exist.
+3. 0.2.0 went through the workflow. `npm view @confidee/flowreel@0.2.0
+_npmUser` shows "GitHub Actions", and the version carries provenance.
+4. 0.0.1 and 0.0.0-stage are deprecated.
 
-- **A. Placeholder first (recommended).** An org owner publishes a minimal
-  placeholder from their machine, then configures the trusted publisher,
-  and the first real version goes through the workflow with provenance:
-  1. In an empty folder, a `package.json` with `"name": "@confidee/flowreel"`,
-     `"version": "0.0.1"`, `"license": "Apache-2.0"`, the same
-     `repository` as `runtime/package.json`, and a README saying it is a
-     placeholder and to use the next version. Then
-     `npm publish --access public` (asks for the 2FA code).
-  2. Within the next 2 days: configure the trusted publisher
-     (`Confidee/flowreel` / `release.yml` / environment `npm`, allow
-     publish), then cut the first real release with the steps above.
-  3. `npm deprecate @confidee/flowreel@0.0.1 "Placeholder; use 0.2.0 or later."`
-  4. Turn on "Require two-factor authentication and disallow tokens".
-
-  Only the placeholder carries a personal publisher record, and every real
-  version has provenance.
-
-- **B. Real version first.** An org owner builds the release locally from
-  the tagged commit and runs `npm publish --access public` in `runtime/`
-  (without `--provenance`: a local machine cannot produce it). Then configure the trusted publisher; every later version
-  goes through the workflow. The first real version then has no provenance
-  and a personal publisher record.
-
-If npm's website does accept a trusted publisher for a not-yet-published
-name when you try it, skip the manual step entirely: configure it, then
-tag.
+For a new package name, repeat this: publish a minimal placeholder by hand
+(a `package.json` with the name, version `0.0.1`, license, the same
+`repository` as `runtime/package.json` and a README saying it is a
+placeholder), configure the trusted publisher, cut the first real release
+within 2 days of configuring it (or it expires), then deprecate the
+placeholder. Only the placeholder carries
+a personal publisher record.
 
 ### Claude Code
 
@@ -250,7 +234,9 @@ These are marked `TODO(verify)` in the docs. None blocks a release; each
 needs a real environment to close:
 
 - `docs/team-install.md`: a sparse install from GitHub
-  (`--sparse .claude-plugin plugin`) once the repository is public.
+  (`--sparse .claude-plugin plugin`). The repository is public and the
+  flag and the `sparsePaths` key exist (see the guide); the end-to-end
+  sparse install is still unverified.
 - `docs/pipeline-and-gates.md`: run the GitHub Actions examples in a real
   workflow.
 - `docs/adapters.md`: replay the Microsoft 365 RBAC for Applications steps

@@ -22,14 +22,16 @@ you three things:
 You record the flow once and get the regression test, the release evidence
 and the demo or training video from it.
 
-> **Status: 0.x, pre-release.** The APIs described here are the ones in
+> **Status: 0.x** (APIs may still change between minor versions). The APIs
+> described here are the ones in
 > the code today, including the `rails-inertia` and `mail-graph` adapters
 > and the Claude Code plugin. Not shipped yet: a `flowreel` command-line
 > binary (a project calls the exported commands from its own entry files)
 > and voice engines off macOS (videos made there are silent). The runtime
-> is published to npm as `@confidee/flowreel` from this repository's
-> [release workflow](RELEASING.md); until the first release is out,
-> install it from a clone ([Without the plugin](#without-the-plugin)).
+> is on npm as
+> [`@confidee/flowreel`](https://www.npmjs.com/package/@confidee/flowreel),
+> published by this repository's [release workflow](RELEASING.md) with a
+> provenance attestation.
 
 ## What a run looks like (the 60-second version)
 
@@ -45,7 +47,9 @@ You type `/flowreel:run checkout` in Claude Code, or
    development: staging is then reported as `skipped (--local)`.
 3. **The result.** `pipeline.md` puts both stages side by side, and the exit
    code reports the verdict: 0 pass, 1 fail, 2 staging not configured,
-   3 nothing verified, 4 a shared-config change could not be put back.
+   3 nothing verified, 4 a shared-config change could not be put back,
+   64 bad arguments, 130 interrupted (Ctrl-C). See
+   [Exit codes](docs/pipeline-and-gates.md#exit-codes).
 4. **The video.** An MP4 at 1920x1080. A title card, then your app with a
    caption bar per step ("Checkout · The customer pays with a saved card ·
    Passed"), email cards where mail moved, and an outro listing every step.
@@ -94,7 +98,7 @@ locator fix. It never edits an assertion.
 
 ## Quick start
 
-You need Node.js 20.19+ or 22.12+ (any 20+ if your `package.json` has
+You need Node.js 20.19+, 22.12+ or 23+ (any 20+ if your `package.json` has
 `"type": "module"`; prefer 22 or later, since Node 20 is end-of-life and
 supported as best effort only), Playwright 1.56 or later with its
 Chromium, and, for videos, ffmpeg. [Getting started](docs/getting-started.md#1-prerequisites)
@@ -133,16 +137,16 @@ every command the plugin may run on your machine.
 
 ### Without the plugin
 
-From npm (once the first release is published):
+From npm:
 
 ```bash
 npm install --save-dev @confidee/flowreel @playwright/test tsx
 npx playwright install chromium
-npm run flowreel -- --local      # once the project files are wired (next paragraph)
+npm run flowreel -- --local      # once the project files are wired (see "Then follow" below)
 ```
 
-Before that, or to try an unreleased change, install it from a clone of
-this repository, as a **copy**:
+To try an unreleased change, install it from a clone of this repository,
+as a **copy**:
 
 ```bash
 # 1. Build the runtime once, in the clone.

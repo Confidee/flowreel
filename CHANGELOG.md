@@ -2,7 +2,7 @@
 
 All notable changes to flowreel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
-uses [Semantic Versioning](https://semver.org/) (0.x while pre-release).
+uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor versions).
 
 ## [Unreleased]
 
@@ -18,6 +18,18 @@ uses [Semantic Versioning](https://semver.org/) (0.x while pre-release).
 ### Changed
 
 - CI can also be started by hand (Actions -> CI -> Run workflow).
+- README: install from npm (`@confidee/flowreel` is published); a clone
+  is only for trying an unreleased change.
+- Docs: they now say the package is on npm (no "pre-release" or "until the
+  runtime is on a registry"), and the example's setup offers the npm
+  install first.
+- Docs: exit 130 and the `INCOMPLETE` verdict for an interrupted run are
+  documented everywhere the exit codes are listed.
+- Docs: the tour scanner's TypeScript range is stated (5.x and 6.x;
+  TypeScript 7 is not supported yet, issue #6), with a troubleshooting
+  entry.
+- Docs: links in the plugin's templates and README work outside the
+  repository; the changelog has version links.
 - Dependabot no longer proposes major versions of `typescript` (TypeScript
   7 has no JavaScript compiler API, which the tour scanner uses) or
   `@types/node` (the type definitions follow the supported Node versions,
@@ -223,3 +235,6 @@ plugin with its marketplace entry, the docs and the Rails seam kit.
 - SECURITY.md's scope names a command the plugin runs without
   [docs/plugin.md](docs/plugin.md) listing it, and instructions injected
   into the model's context through the session-start check's output.
+
+[Unreleased]: https://github.com/Confidee/flowreel/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Confidee/flowreel/releases/tag/v0.2.0

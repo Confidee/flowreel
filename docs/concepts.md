@@ -94,7 +94,7 @@ it in the catalogue, and only `feature()` applies it:
 A flow cannot pick its own target or skip itself. A static tripwire
 (`scanAreaSpec`, `checkDeclaredFeatures`) fails your unit tests if a test
 does not start with `feature()`, uses a hook, or calls `test.skip`,
-`test.only`, `test.fixme` or `test.fail` anywhere.
+`test.only`, `test.fixme`, `test.fail` or `test.slow` anywhere.
 
 ## Steps
 
@@ -149,12 +149,12 @@ inherited from your shell. See [Pipeline and gates](pipeline-and-gates.md).
 
 A run's **verdict** is decided only by Playwright assertions:
 
-| Verdict      | Meaning                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| `PASS`       | every step that ran passed (tour: at least one feature verified, none failed)                    |
-| `FAIL`       | at least one step or feature failed, or the run died before writing a summary                    |
-| `N/A`        | nothing was verified: the gate test skipped with an `N/A:` reason, or every feature was dev-only |
-| `INCOMPLETE` | pipeline only: development passed, but staging is not configured in this environment             |
+| Verdict      | Meaning                                                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PASS`       | every step that ran passed (tour: at least one feature verified, none failed)                                                                          |
+| `FAIL`       | at least one step or feature failed, or the run died before writing a summary                                                                          |
+| `N/A`        | nothing was verified: the gate test skipped with an `N/A:` reason, or every feature was dev-only                                                       |
+| `INCOMPLETE` | pipeline only: development passed but staging is not configured (exit 2), or Ctrl-C stopped the pipeline before a stage that would have run (exit 130) |
 
 N/A is not a pass. The video, the narration and the demos are produced
 after the verdict is fixed and can never change it. The plugin explains

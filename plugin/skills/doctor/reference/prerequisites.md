@@ -62,8 +62,8 @@ libpq` (or the `PATH` export Homebrew prints) puts `psql` on `PATH`.
 ## What the SessionStart hook does
 
 At session start the plugin runs the same check in its quiet mode: silent
-unless the project uses flowreel (a `flowreel.config.ts`, an
-`e2e/flowreel/` folder or the `@confidee/flowreel` dependency), then
+unless the project uses flowreel (a `flowreel.config.ts` or
+`e2e/flowreel.config.ts`, an `e2e/flowreel/` folder or the `@confidee/flowreel` dependency), then
 one line per missing required, video-only or voice-only item, each with
 its install command, then a last line pointing at `/flowreel:doctor`.
 Each `Install:` value is a command on its own, safe to paste (an item

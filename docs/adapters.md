@@ -56,7 +56,7 @@ interface AppAdapter<P extends string = string> {
 | `sessionKind`   | Optional. Personas with the same email but a different kind (say `staff` and `portal`) get separate sessions.                                                                                                                                                                                                                             |
 | `needsBrowser`  | Optional. Return true where sign-in needs a real form. Default: staging only.                                                                                                                                                                                                                                                             |
 | `keepalivePath` | Optional. A cheap page every persona can GET. Default `/`.                                                                                                                                                                                                                                                                                |
-| `health`        | Optional. Null when the target is healthy, otherwise what is wrong (no secrets). Reserved for a generic preflight: in 0.1 no runtime code calls it, so a project's own preflight calls it if it wants the check.                                                                                                                          |
+| `health`        | Optional. Null when the target is healthy, otherwise what is wrong (no secrets). Reserved for a generic preflight: in 0.x no runtime code calls it, so a project's own preflight calls it if it wants the check.                                                                                                                          |
 | `prepareLocal`  | Optional. Development only, before any sign-in: migrate and seed the database, build assets. Throw to stop the run.                                                                                                                                                                                                                       |
 
 Helpers for the common cookie-session app:
@@ -195,7 +195,7 @@ Drivers:
 | -------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `HttpSeamMailDriver` | `@confidee/flowreel/rails-inertia` | development: the app's test seams ([the seam protocol](#the-seam-protocol); any backend may implement it) |
 | `GraphMailDriver`    | `@confidee/flowreel/mail-graph`    | staging: one Microsoft 365 mailbox through Microsoft Graph ([below](#mail-graph-microsoft-365))           |
-| Mailpit, IMAP        | none                               | out of scope for 0.1                                                                                      |
+| Mailpit, IMAP        | none                               | out of scope for 0.x                                                                                      |
 
 `/mail` holds the contract only; it exports no driver. The seam driver
 ships on `/rails-inertia` because the Rails seam kit is its reference
@@ -292,7 +292,7 @@ FAILED undo entry, which makes the pipeline exit 4.
 Your cleanup fixture must be an `auto` fixture declared **before** the
 recorded page and must not depend on it. Playwright tears fixtures down in
 reverse order, so it then runs after the page and its video are closed:
-off camera, with no caption. In 0.1 this fixture is project-side:
+off camera, with no caption. In 0.x this fixture is project-side:
 `tourFixtures()` does not provide one.
 
 ## Brand and CardCopy
@@ -682,7 +682,7 @@ the tenant id, client id, client secret, mailbox and reply domain (see
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `tenantId`              | the directory (tenant) id                                                                                          |
 | `clientId`              | the app registration's application (client) id                                                                     |
-| `clientSecret`          | a client secret of the app. The only credential type in 0.1: no certificate                                        |
+| `clientSecret`          | a client secret of the app. The only credential type in 0.x: no certificate                                        |
 | `mailbox`               | the QA mailbox: the requester the flows send as, and where the app's staging mail to the personas lands            |
 | `replyDomain`           | the only domain a send or reply may address (the staging reply domain)                                             |
 | `defaultTimeoutMs`      | the per-hop wait                                                                                                   |
@@ -823,7 +823,7 @@ role group.
    the scope.
 
 7. **Create a client secret** (the only credential type the driver
-   supports in 0.1). Record its expiry and rotate it before then (180 days
+   supports in 0.x). Record its expiry and rotate it before then (180 days
    is a sensible maximum), and keep it only in your password manager.
 
 8. **Check the mailbox itself** before the first run, and again before each

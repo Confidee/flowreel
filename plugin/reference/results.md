@@ -44,8 +44,9 @@ pipeline's own `pipeline.md`.
 
 ## pipeline.json
 
-`verdict` (`PASS` | `FAIL` | `N/A` | `INCOMPLETE` = development passed,
-staging not configured), `verdictReason`, `exitCode`, `options`, and
+`verdict` (`PASS` | `FAIL` | `N/A` | `INCOMPLETE` = development passed
+but staging is not configured (exit 2), or Ctrl-C stopped the pipeline
+before a stage that would have run (exit 130)), `verdictReason`, `exitCode`, `options`, and
 `stages[]`, each with: `stage` (development | staging), `verdict` (`PASS`,
 `FAIL`, `N/A`, `not run`, `not configured`, `skipped`), `reason`, `runId`,
 `resultsDir`, `summary` / `summaryJson` (paths, or null when the stage

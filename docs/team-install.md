@@ -49,13 +49,15 @@ claude plugin marketplace add Confidee/flowreel --sparse .claude-plugin plugin
 claude plugin install flowreel@flowreel
 ```
 
-`--sparse` checks out only the marketplace manifest and the plugin, not the
-whole repository. Without it, Claude Code clones the full repository.
+`--sparse <paths...>` checks out only those directories (plus the files at
+the repository root), not the whole repository. Without it, Claude Code
+clones the full repository.
 
-<!-- TODO(verify): run the sparse install from GitHub once the repository
-is public. The `--sparse` flag and the `sparsePaths` key exist in Claude
-Code 2.1.300 (`claude plugin marketplace add --help` and the marketplace
-source schema); earlier install checks used a local clone. -->
+<!-- TODO(verify): run the sparse install from GitHub end to end. The
+`--sparse <paths...>` flag and the `sparsePaths` key (under the marketplace
+source in the settings schema) exist in Claude Code 2.1.301, the version CI
+pins (`claude plugin marketplace add --help` and the settings schema);
+earlier install checks used a local clone. -->
 
 The plugin is installed for you (user scope), in every project. Restart
 Claude Code (or start a new session) to load it, then check it with
@@ -110,7 +112,7 @@ credentials are needed.
 
 `claude plugin marketplace add <source> --scope project` and
 `claude plugin install flowreel@flowreel --scope project` write the same
-two keys for you (checked with Claude Code 2.1.300: the marketplace under
+two keys for you (checked with Claude Code 2.1.301: the marketplace under
 `extraKnownMarketplaces.flowreel.source`, and
 `"enabledPlugins": { "flowreel@flowreel": true }`). With a local clone as
 the source, the first key holds a `"directory"` source with that clone's

@@ -89,7 +89,9 @@ until the user says yes. A no to one part skips only that part.
 
 ## 5. Install (asks again)
 
-Show the command and ask before running it. The runtime is pre-release:
+Show the command and ask before running it. The runtime comes from npm,
+or from a local clone for an unreleased change or when the registry
+cannot be reached:
 
 - first ask whether to check the registry:
   `npm view @confidee/flowreel version` sends a request to the

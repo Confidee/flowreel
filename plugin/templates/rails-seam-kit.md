@@ -1,11 +1,11 @@
 # Rails test seams for flowreel (the protocol)
 
 > The Rails seam kit (controllers, the routes file and one request spec
-> per seam) is in [`rails/`](rails/README.md), and the client that talks
+> per seam) is in [`rails/`](https://github.com/Confidee/flowreel/blob/main/plugin/templates/rails/README.md), and the client that talks
 > to it ships with `@confidee/flowreel/rails-inertia`:
 > `HttpSeamMailDriver` (mail and jobs) and `seamSignIn` (sign-in). This
 > page is the protocol both sides keep; the full reference is in
-> [docs/adapters.md](../../docs/adapters.md#the-seam-protocol).
+> [docs/adapters.md](https://github.com/Confidee/flowreel/blob/main/docs/adapters.md#the-seam-protocol).
 
 A **seam** is a test-only HTTP endpoint the development stage uses instead
 of a slow or unsafe real path: signing a persona in without the password

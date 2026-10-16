@@ -125,9 +125,10 @@ The steps above run the example as shipped. It is already scaffolded, so
 stops, because it never overwrites a file. To walk the path a new project
 takes (doctor, then init, then a green run), start from the app alone.
 
-You need the plugin installed ([Install](../../docs/plugin.md#install)) and
-the runtime built in your checkout (step 1 of [Run it](#run-it)). Then,
-from the folder that holds this README:
+You need the plugin installed ([Install](../../docs/plugin.md#install)).
+The runtime built in your checkout (step 1 of [Run it](#run-it)) is needed
+only if you install the runtime from your clone (step 3 below). Then, from
+the folder that holds this README:
 
 ```bash
 mkdir ~/notes-fresh && cp -R app ~/notes-fresh/
@@ -157,15 +158,16 @@ Open Claude Code in `~/notes-fresh` and run:
    The scaffolded smoke flow (open `/`, then search) and tour feature A1
    (the home page's heading) already fit Notes, so the flows need no edits.
 
-3. **Install.** If the runtime is not on npm yet (or you want the one in
-   your clone), init asks where it comes from. Name your clone's
-   `runtime` folder. Before the path
-   install, init proposes appending `install-links=true` to
+3. **Install.** Init offers `npm view @confidee/flowreel version` (a
+   request to the npm registry), then `npm i -D @confidee/flowreel tsx`.
+   Say yes. To use the runtime in your clone instead, say no and name your
+   clone's `runtime` folder when init asks where it comes from. Before the
+   path install, init proposes appending `install-links=true` to
    `~/notes-fresh/.npmrc`, as its own yes. Without that line npm links the
    folder, and Playwright stops with "Requiring @playwright/test second
    time" ([Troubleshooting](../../docs/troubleshooting.md#module-loading)).
-   Say no and init offers an `npm pack` tarball of the runtime instead.
-   Init also installs `tsx`.
+   Say no to that line and init offers an `npm pack` tarball of the runtime
+   instead. Either way init also installs `tsx`.
 4. **Check, then run.** Init's own checks list the flows and run the
    browser-free unit suite. Then run the round trip and the tour on the
    development stage:
@@ -263,7 +265,7 @@ Step titles `A1.2 The editor writes …` become the captions. The reporter
 composes everything after the run. The verdict is fixed before composition
 starts, and nothing in the video can change it.
 
-**The reporter's gate module (a known 0.1 limitation).** In 0.1,
+**The reporter's gate module (a known 0.x limitation).** In 0.x,
 `SummaryReporter` requires exactly one round-trip module (a release-gate
 flow), even in a project that has only a tour. This example has only a
 tour, so `tour.ts` declares `NOTES_GATE`, a gate whose project is never

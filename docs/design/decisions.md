@@ -58,7 +58,8 @@ stage only if development passed. Each stage gets a clean environment:
 staging secrets never reach the development stage. Exit codes are a
 contract: 0 pass, 1 fail, 2 staging not configured, 3 nothing verified,
 4 a shared-configuration change could not be put back (outranks every
-other code), 64 a usage error. A per-run database (`DbIsolation`) is
+other code), 64 a usage error, 130 interrupted (Ctrl-C stopped the
+pipeline before a stage that would have run). A per-run database (`DbIsolation`) is
 optional.
 
 **Why.** Staging is shared and slow; a failure that already shows on
@@ -105,8 +106,8 @@ turn a local run into a staging run.
 ## 7. ESM with a require() path
 
 **Decision.** The runtime is ESM-only and every entry point has a `default`
-export condition, so it also loads with `require()` on Node 20.19+ or
-22.12+. `npm run smoke:exports` checks both against the built package.
+export condition, so it also loads with `require()` on Node 20.19+,
+22.12+ or 23+. `npm run smoke:exports` checks both against the built package.
 
 **Why.** Playwright compiles a project's test files to CommonJS unless its
 `package.json` says `"type": "module"`. Supporting `require(esm)` keeps
@@ -120,7 +121,9 @@ an argument, typed structurally (`TypeScriptApi`).
 
 **Why.** The runtime and its published types stay free of a `typescript`
 dependency, and the project's compiler version is the one that parses its
-flows.
+flows. The scanner supports TypeScript 5.x and 6.x. TypeScript 7 has no
+JavaScript compiler API, so it is not supported yet
+([issue #6](https://github.com/Confidee/flowreel/issues/6)).
 
 ## 9. Demo publishing is per module
 
@@ -241,11 +244,15 @@ the review history and the releases in one place.
 ## 17. Releases publish through npm trusted publishing
 
 **Decision.** A tag `v<version>` runs `.github/workflows/release.yml`,
-which checks that every released file carries the tag's version
-(`scripts/check-version.mjs`), runs the runtime's checks and runs
-`npm publish --provenance --access public` from `runtime/` with
+whose build job checks that every released file carries the tag's version
+(`scripts/check-version.mjs`), runs the runtime's checks, packs the tarball
+and records its SHA-256. The publish job checks out nothing, verifies the
+tarball against that SHA-256 and runs
+`npm publish <tarball> --provenance --access public` with
 `id-token: write`. There is no `NPM_TOKEN` secret. The job runs in the `npm`
-GitHub environment, which can require a second person's approval.
+GitHub environment, which can require a second person's approval. After
+npm accepts the publish, a third job (`contents: write`, without the OIDC
+token) creates the GitHub Release with the version's changelog section.
 
 **Why.** No long-lived token can leak. Provenance links every version to
 the workflow run and commit that built it, and the version is published by

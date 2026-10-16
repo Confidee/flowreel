@@ -83,7 +83,8 @@ your project
 │   └── brand/                 logos
 └── flowreel-results/<RUN_ID>/, flowreel-demos/latest/   (git-ignored)
 
-@confidee/flowreel (runtime; each line is a subpath, the root re-exports them all)
+@confidee/flowreel (runtime; each line is a subpath; the root re-exports them all except
+/reporter, /demos and the adapters /rails-inertia and /mail-graph)
 ├── core        errors, poll, env names and aliases, undo ledger, cross-run inbound ledger
 ├── config      defineConfig(), target allowlist (loopback-only local, production refused),
 │               secrets file loader (owner-only check), createConfig() (the Playwright config)
@@ -123,7 +124,7 @@ These are the contracts a project (or an adapter) implements. The
 
 | Interface            | Purpose                                                                                                                                                                                      | Shipped implementations                                                           |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `AppAdapter`         | `signIn(persona)`, `signOut`, `isSignedOut(response)` and `keepalivePath` (read by `tourFixtures`), `health()` (optional, reserved for a generic preflight), `prepareLocal()`                | the example's adapter; `seamSignIn()` for apps with the Rails seam kit            |
+| `AppAdapter`         | `signIn(ctx, key, persona)`, `signOut`, `isSignedOut(response)` and `keepalivePath` (read by `tourFixtures`), `health()` (optional, reserved for a generic preflight), `prepareLocal()`      | the example's adapter; `seamSignIn()` for apps with the Rails seam kit            |
 | `MailDriver`         | `send`, `waitFor`, `reply`, `health`, `saveEml`                                                                                                                                              | `GraphMailDriver` (Microsoft 365), `HttpSeamMailDriver` (the local seam protocol) |
 | `DbIsolation`        | `create(key)`, `drop(key)` for a per-run database                                                                                                                                            | none: a project supplies its own (for example a Postgres template clone)          |
 | `CleanupAdapter`     | find and close a run's leftover records off-camera. The runtime owns the rules (`cleanupCandidates` / `cleanUpRunRecords`); the per-test fixture that calls them stays in the project        | none: a project supplies the number shape and the `solve` functions               |
@@ -156,16 +157,16 @@ needs it.
 
 ## The plugin
 
-| Skill                                                                | What it does                                                                                                                             | Side effects                                                   |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `/flowreel:doctor`                                                   | checks every prerequisite, explains what each is for, offers the exact install command                                                   | installs only after the user confirms (user-invoked only)      |
-| `/flowreel:init`                                                     | adds `@confidee/flowreel` as a dev dependency, scaffolds `flowreel.config.ts`, `e2e/flowreel/`, `.gitignore` entries and an env template | edits `package.json` and creates files after showing the plan  |
-| `/flowreel:inventory <module>`                                       | read-only exploration of the app -> a feature catalogue with entry points, setup, assertions, undo and a proposed staging policy         | writes the catalogue only (user-invoked only)                  |
-| `/flowreel:author <module> [features]`                               | writes plans and flows from the approved catalogue against the flow API; runs them on the development stage until green                  | creates and edits flow files, runs the app (user-invoked only) |
-| `/flowreel:narrate <module>`                                         | writes the spoken narration for every step (teaching tone; never ids, tokens or addresses)                                               | narration JSON only (user-invoked only)                        |
-| `/flowreel:run <module> [--local\|--staging-only] [--pace demo\|qa]` | runs the pipeline and explains the result; never retries; reports undo failures first                                                    | runs tests (user-invoked only)                                 |
-| `/flowreel:explain [run]`                                            | reads the summary and pipeline JSON and the trace of a failed step; proposes locator-only fixes                                          | none                                                           |
-| `/flowreel:demos [run]`                                              | publishes a run's videos to `latest/` with a README                                                                                      | copies files after a yes (user-invoked only)                   |
+| Skill                                                                | What it does                                                                                                                                      | Side effects                                                   |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `/flowreel:doctor`                                                   | checks every prerequisite, explains what each is for, offers the exact install command                                                            | installs only after the user confirms (user-invoked only)      |
+| `/flowreel:init`                                                     | adds `@confidee/flowreel` as a dev dependency, scaffolds `flowreel.config.ts`, `e2e/flowreel/`, `.gitignore` entries and an env template          | edits `package.json` and creates files after showing the plan  |
+| `/flowreel:inventory <module>`                                       | read-only exploration of the app -> a feature catalogue with entry points, setup, assertions, undo and a proposed staging policy                  | writes the catalogue only (user-invoked only)                  |
+| `/flowreel:author <module> [features]`                               | writes plans and flows from the approved catalogue against the flow API; runs them on the development stage until green                           | creates and edits flow files, runs the app (user-invoked only) |
+| `/flowreel:narrate <module>`                                         | writes the spoken narration for every step (teaching tone; never ids, tokens or addresses)                                                        | narration JSON only (user-invoked only)                        |
+| `/flowreel:run <module> [--local\|--staging-only] [--pace demo\|qa]` | runs the pipeline and explains the result; never retries; reports undo failures first                                                             | runs tests (user-invoked only)                                 |
+| `/flowreel:explain [run]`                                            | reads the summary and pipeline JSON, the failing step's `error-context.md` and screenshot (never the trace archives); proposes locator-only fixes | none                                                           |
+| `/flowreel:demos <RUN_ID>`                                           | publishes a run's videos to `latest/` with a README                                                                                               | copies files after a yes (user-invoked only)                   |
 
 Agents: `flow-author` (writes one area's flows against the API),
 `run-explainer` (reads results, never edits assertions), `catalogue-scout`
@@ -242,14 +243,15 @@ first).
 
 ## Roadmap
 
-1. Publish `@confidee/flowreel` to npm from GitHub Actions with trusted
-   publishing and provenance ([RELEASING.md](../../RELEASING.md)).
-2. A `flowreel` command-line binary, so a project no longer wires the
+Done: the runtime is published to npm from GitHub Actions with trusted
+publishing and provenance (0.2.0, see [RELEASING.md](../../RELEASING.md)).
+
+1. A `flowreel` command-line binary, so a project no longer wires the
    exported commands into its own entry files.
-3. A voice engine off macOS (Piper or a cloud speech service).
-4. A second proof outside the first user: the minimal example plus one
+2. A voice engine off macOS (Piper or a cloud speech service).
+3. A second proof outside the first user: the minimal example plus one
    external app.
-5. Submission to Anthropic's plugin directory.
+4. Submission to Anthropic's plugin directory.
 
 ## Risks and how they are handled
 

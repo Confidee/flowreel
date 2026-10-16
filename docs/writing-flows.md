@@ -562,7 +562,9 @@ expect(problems).toEqual([])
   tested exactly once.
 
 The runtime takes the TypeScript compiler API as an argument (typed
-structurally), so it has no dependency on `typescript` itself.
+structurally), so it has no dependency on `typescript` itself. The scanner
+supports TypeScript 5.x and 6.x; TypeScript 7 is not supported yet
+([issue #6](https://github.com/Confidee/flowreel/issues/6)).
 
 ## Checklist before you hand a flow back
 

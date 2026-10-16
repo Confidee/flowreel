@@ -8,7 +8,7 @@ By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 Report security problems privately, as described in
 [SECURITY.md](SECURITY.md), never in a public issue.
 
-flowreel is pre-release (0.x). This repository,
+flowreel is at 0.x. This repository,
 [Confidee/flowreel](https://github.com/Confidee/flowreel), is its only
 source: issues, pull requests and releases all happen here. Open an issue
 before a large change, so we can agree the approach first.
