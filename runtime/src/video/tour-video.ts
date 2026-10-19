@@ -29,6 +29,7 @@ import {
   probeDuration,
   programSec,
 } from "./ffmpeg.js"
+import { withMediaSignal } from "./stop.js"
 import type { VideoKit } from "./kit.js"
 import { type VideoLogData, videoEnabled, videoOffReason } from "./recorder.js"
 import {
@@ -470,6 +471,11 @@ export interface TourVideoRequest {
   startedAt: Date
   verdict: string
   features: TourFeatureRecord[]
+  /**
+   * Stops the composition: every tool it started ends and the outcome is
+   * not produced. The summary reporter passes one that aborts on Ctrl-C.
+   */
+  signal?: AbortSignal
 }
 
 /** One produced tour video file. */
@@ -568,12 +574,24 @@ const firstLine = (message: string) =>
  * as. Never throws: video off, no ffmpeg, nothing recorded or any failure is
  * { produced: false, reason }.
  */
-export async function produceTourVideos(
+export function produceTourVideos(
   req: TourVideoRequest,
   kit: VideoKit,
   tour: TourVideoConfig,
   env: Env = process.env,
   render: PngRenderer = renderPngs,
+): Promise<TourVideoOutcome> {
+  return withMediaSignal(req.signal, () =>
+    composeTourVideos(req, kit, tour, env, render),
+  )
+}
+
+async function composeTourVideos(
+  req: TourVideoRequest,
+  kit: VideoKit,
+  tour: TourVideoConfig,
+  env: Env,
+  render: PngRenderer,
 ): Promise<TourVideoOutcome> {
   const pace = videoPaceFor("tour", env, req.pace)
   const paced = { pace: pace.pace, slowFactor: pace.slowFactor }

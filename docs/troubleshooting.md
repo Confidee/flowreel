@@ -174,10 +174,33 @@ feature was development-only. N/A is not a pass.
 **Exit 4, `UNDO FAILED, manual action needed`**
 See [Undo and cleanup](#undo-and-cleanup). This outranks every other code.
 
-**Exit 130, `INCOMPLETE` (interrupted)**
-Ctrl-C stopped the pipeline before a stage that would have run. It is never
-a pass. Run again. See
+**Exit 130, `INCOMPLETE` (stopped)**
+Ctrl-C, a CI's stop signal (SIGTERM) or the `--deadline` stopped the
+pipeline and no stage failed: before a stage that would have run, while
+the stages that ran passed, during the combined video, or a second Ctrl-C
+aborted it. A stopped run is never a pass. `pipeline.json` says what stopped it
+(`stoppedBy`) and whether it finished (`status`). Run again. See
 [Interrupting a run](pipeline-and-gates.md#interrupting-a-run).
+
+**A CI job ran out of time** (no `pipeline.md`, or a `pipeline.json` whose
+`status` is `running` or `stopping`)
+The CI killed the job before the pipeline finished. Give the pipeline a
+deadline below the job's limit (`--deadline`, or `FLOWREEL_DEADLINE`), so
+it stops itself first and the stage still writes its video, trace and
+summary. On GitHub Actions, also start it with `exec` so a cancel reaches
+it. See [Time limits on CI](pipeline-and-gates.md#time-limits-on-ci).
+Check the stage's `undo.md` by hand: a killed stage cannot put anything
+back.
+
+**`deadline reached (--deadline …): stopping <stage>`**
+The deadline came while a stage ran. The stage stops as on a Ctrl-C and
+no further stage starts. Raise the deadline only if the job's limit
+allows it.
+
+**`SIGTERM after the stop request: still finishing the stage's report; a kill may follow`**
+Your CI sent SIGTERM after a first stop signal (GitHub Actions does so
+7.5 s after its SIGINT). The pipeline keeps waiting for the stage's
+report. If the CI's kill comes first, see the entry above.
 
 **`no summary written (playwright exited 1)`**
 The stage died before its reporter ran: a crash in global setup (a sign-in,
@@ -247,6 +270,13 @@ A stale local server from an earlier run is still listening. Find it
 (`lsof -i :<port>` on macOS and Linux), stop it, and run again. A web
 server is reused only when you allowed it and nothing per-run (such as a
 fresh database) is in play.
+
+**A web server from an earlier run is still running**
+Playwright stops its web server in its teardown. A stage stopped by
+Ctrl-C, SIGTERM, the `--deadline` or a vanished pipeline still gets there.
+A server is left running only when the stage was killed outright
+(SIGKILL), or got a SIGHUP without a terminal (the default: the stage
+ends at once). Stop it as above.
 
 **`<clone command> <key> failed: …`**
 `DbIsolation.create` failed, so development did not run and is recorded

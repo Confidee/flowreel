@@ -140,6 +140,20 @@ its aliases are both set to different values, the run stops with a message
 naming both variables. An inherited `FLOWREEL_TARGET=staging` can never
 silently turn a local run into a staging run.
 
+### Stopping and deadlines
+
+| Variable                      | Values                                                                  | Meaning                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `FLOWREEL_DEADLINE`           | a duration (`25m`, `90s`, `1h`, milliseconds) or a time (ISO, epoch ms) | The pipeline's deadline when `--deadline` is not given. No default. See [Time limits on CI](pipeline-and-gates.md#time-limits-on-ci). |
+| `FLOWREEL_COMPOSE_BUDGET_SEC` | seconds (default 60)                                                    | With a deadline, a video is composed only when at least this much time is left before it; otherwise it is skipped.                    |
+| `FLOWREEL_DEADLINE_AT`        | set by the pipeline                                                     | The deadline as epoch milliseconds, for the stage's own video (and, on Windows, its stop).                                            |
+| `FLOWREEL_PIPELINE_PID`       | set by the pipeline                                                     | The pipeline's process id. The stage stops as on a Ctrl-C when that process is gone.                                                  |
+| `FLOWREEL_HUP`                | set by the pipeline (`graceful`)                                        | Set when the pipeline runs in a terminal: a hangup (SIGHUP) is then a stop request for the stage. Otherwise SIGHUP keeps its default. |
+
+The pipeline never passes an inherited `FLOWREEL_DEADLINE`,
+`FLOWREEL_DEADLINE_AT`, `FLOWREEL_PIPELINE_PID` or `FLOWREEL_HUP` on to a
+stage. See [Interrupting a run](pipeline-and-gates.md#interrupting-a-run).
+
 ### Pace, video and voice
 
 | Variable                   | Values                                        | Meaning                                                                                                   |
@@ -300,14 +314,15 @@ unfilled template fails before any request is made.
 config for one run. You supply what differs between projects. flowreel fixes
 what must not change:
 
-| Fixed by flowreel                                            | Why                                                                         |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `retries: 0`, `workers: 1`, `fullyParallel: false`           | a re-sent mail duplicates records; a re-run sign-in feeds a lockout counter |
-| `trace: "on"`, `screenshot: "on"`, `video: "on"`             | every run is evidence; the video is built from the recording                |
-| `outputDir` and the HTML report inside `<results>/<RUN_ID>/` | a shared report folder would keep only a pipeline's last stage              |
-| reporters `list`, `html`, and your summary reporter          | the summary is what the pipeline and the plugin read                        |
-| `webServer` only when the target is `local`                  | staging is never started by flowreel                                        |
-| `forbidOnly` on CI                                           | a stray `test.only` must not pass a gate                                    |
+| Fixed by flowreel                                            | Why                                                                                                                                                                                                           |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `retries: 0`, `workers: 1`, `fullyParallel: false`           | a re-sent mail duplicates records; a re-run sign-in feeds a lockout counter                                                                                                                                   |
+| `trace: "on"`, `screenshot: "on"`, `video: "on"`             | every run is evidence; the video is built from the recording                                                                                                                                                  |
+| `outputDir` and the HTML report inside `<results>/<RUN_ID>/` | a shared report folder would keep only a pipeline's last stage                                                                                                                                                |
+| reporters `list`, `html`, and your summary reporter          | the summary is what the pipeline and the plugin read                                                                                                                                                          |
+| `webServer` only when the target is `local`                  | staging is never started by flowreel                                                                                                                                                                          |
+| `forbidOnly` on CI                                           | a stray `test.only` must not pass a gate                                                                                                                                                                      |
+| `launchOptions` `handleSIGTERM: false`                       | a CI signals the whole process group; a browser that closed itself would lose the running test's video. The runner stops gracefully and closes it. A project's own launchOptions keep this unless they set it |
 
 | Input                                                 | Meaning                                                                         |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------- |

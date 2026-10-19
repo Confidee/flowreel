@@ -64,6 +64,7 @@ test.describe("arguments", () => {
       pace: null,
       keepDb: false,
       narration: null,
+      deadline: null,
       help: false,
     })
     expect(
@@ -195,8 +196,6 @@ test.describe("each stage", () => {
 
   test("one playwright run of the module's projects, never with retries", () => {
     expect(stageCommand("e2e/flowreel.config.ts", ["a", "b"], true)).toEqual([
-      "--no-install",
-      "playwright",
       "test",
       "--config=e2e/flowreel.config.ts",
       "--project=a",

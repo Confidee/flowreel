@@ -21,6 +21,7 @@ import {
   type PipelineIo,
   type PipelineSpec,
   type StageRecord,
+  type StopSignal,
   processIo,
   readUndoLedger,
   runPipeline,
@@ -57,13 +58,16 @@ function harness(
 ) {
   const lines: string[] = []
   const children: Record<string, string>[] = []
-  const interrupts: (() => void)[] = []
+  const interrupts: ((signal?: StopSignal) => void)[] = []
   const exits: number[] = []
   let n = 0
+  // The monotonic clock the signal de-duplication reads; tests advance it.
+  const clock = { ms: 0 }
   const io: PipelineIo = {
     env: { PATH: "/bin", APP_SECRET_PW: "pw" },
     log: (l) => lines.push(l),
     now: () => new Date(Date.UTC(2026, 9, 14, 12, 0, n++)),
+    clock: () => clock.ms,
     onInterrupt: (handler) => interrupts.push(handler),
     exit: (code) => {
       exits.push(code)
@@ -107,7 +111,12 @@ function harness(
     report: { markdown: (doc) => `# ${doc.verdict}\n` },
     ...extra,
   }
-  return { io, spec, lines, children, interrupts, exits }
+  /** A second Ctrl-C, a second after the first (never a duplicate). */
+  const later = (signal?: StopSignal) => {
+    clock.ms += 1000
+    interrupts[0](signal)
+  }
+  return { io, spec, lines, children, interrupts, exits, clock, later }
 }
 
 const PASS = { verdict: "PASS" }
@@ -235,7 +244,7 @@ test.describe("Ctrl-C", () => {
       expect(await runPipeline([], run.spec, run.io)).toBe(EXIT.interrupted)
       expect(run.children.map((c) => c.FLOWREEL_TARGET)).toEqual(["local"])
       expect(run.lines).toContain(
-        "interrupted: finishing the current stage's report, no next stage",
+        "interrupted: finishing the current stage's report, no next stage; press Ctrl-C again to stop now without waiting",
       )
       expect(run.lines).toContain("staging: not run (interrupted)")
       expect(run.exits).toEqual([])
@@ -259,7 +268,7 @@ test.describe("Ctrl-C", () => {
         () => {
           run.interrupts[0]()
           events.push("second Ctrl-C")
-          run.interrupts[0]()
+          run.later()
           events.push(`exit ${run.exits.join(",")}`)
         },
       )
@@ -290,7 +299,7 @@ test.describe("Ctrl-C", () => {
         { db: { modules: ["tour"], isolation, keyPrefix: "t" } },
         () => {
           run.interrupts[0]()
-          run.interrupts[0]()
+          run.later()
         },
       )
       await runPipeline(
@@ -319,7 +328,7 @@ test.describe("Ctrl-C", () => {
         { db: { modules: ["tour"], isolation, keyPrefix: "t" } },
         () => {
           run.interrupts[0]()
-          run.interrupts[0]()
+          run.later()
         },
       )
       await runPipeline(["--module", "tour", "--local"], run.spec, run.io)
@@ -719,17 +728,20 @@ test.describe("processIo with a fake spawn", () => {
     }
   }
 
-  test("runs npx in the repo, prefixes both streams line by line, resolves with the exit code", async () => {
+  const LAUNCHER = {
+    launcher: () => ({
+      command: "/usr/bin/node",
+      args: ["/repo/node_modules/@playwright/test/cli.js"],
+      description: "node node_modules/@playwright/test/cli.js",
+    }),
+  }
+
+  test("runs Playwright's CLI with node in the repo, says so, prefixes both streams line by line, resolves with the exit code", async () => {
     const fake = fakeSpawn()
-    const io = processIo("pipe", fake.spawnFn)
+    const io = processIo("pipe", fake.spawnFn, LAUNCHER)
     const capture = captureStreams()
     try {
-      const done = io.runChild(
-        ["playwright", "test"],
-        { A: "1" },
-        "/repo",
-        "[development]",
-      )
+      const done = io.runChild(["test"], { A: "1" }, "/repo", "[development]")
       const child = fake.children[0]
       child.stdout.write("one\ntw")
       child.stdout.write("o\nlast without newline")
@@ -743,9 +755,14 @@ test.describe("processIo with a fake spawn", () => {
       capture.restore()
     }
     expect(fake.calls).toEqual([
-      { command: "npx", args: ["playwright", "test"], cwd: "/repo" },
+      {
+        command: "/usr/bin/node",
+        args: ["/repo/node_modules/@playwright/test/cli.js", "test"],
+        cwd: "/repo",
+      },
     ])
     expect(capture.out).toEqual([
+      "[pipe] [development] playwright: node node_modules/@playwright/test/cli.js\n",
       "[development] one\n",
       "[development] two\n",
       "[development] last without newline\n",
@@ -753,9 +770,56 @@ test.describe("processIo with a fake spawn", () => {
     expect(capture.err).toEqual(["[development] warn\n"])
   })
 
+  test("falls back to npx --no-install when the project's CLI cannot be resolved, and says so", async () => {
+    const fake = fakeSpawn()
+    // No package.json and no @playwright/test under this folder.
+    const { dir, done } = tmp()
+    const io = processIo("pipe", fake.spawnFn)
+    const capture = captureStreams()
+    try {
+      const run = io.runChild(["test"], {}, dir, "[development]")
+      fake.children[0].emit("close", 0)
+      expect(await run).toBe(0)
+    } finally {
+      capture.restore()
+      done()
+    }
+    expect(fake.calls[0]).toMatchObject({
+      command: "npx",
+      args: ["--no-install", "playwright", "test"],
+    })
+    expect(capture.out[0]).toContain(
+      "playwright: npx --no-install playwright (@playwright/test/cli could not be resolved from the project)",
+    )
+  })
+
+  test("a launcher with a problem starts nothing: the stage says why and resolves null", async () => {
+    const fake = fakeSpawn()
+    const io = processIo("pipe", fake.spawnFn, {
+      launcher: () => ({
+        command: "npx",
+        args: [],
+        description: "none",
+        problem: "install @playwright/test",
+      }),
+    })
+    const capture = captureStreams()
+    let code: number | null | undefined
+    try {
+      code = await io.runChild(["test"], {}, "/repo", "[development]")
+    } finally {
+      capture.restore()
+    }
+    expect(code).toBeNull()
+    expect(fake.calls).toEqual([])
+    expect(capture.err).toEqual([
+      "[development] could not start: install @playwright/test\n",
+    ])
+  })
+
   test("a signal-killed child resolves null; a child that cannot start says so and resolves null", async () => {
     const fake = fakeSpawn()
-    const io = processIo("pipe", fake.spawnFn)
+    const io = processIo("pipe", fake.spawnFn, LAUNCHER)
     const capture = captureStreams()
     let killed: number | null | undefined
     let failed: number | null | undefined
@@ -764,7 +828,7 @@ test.describe("processIo with a fake spawn", () => {
       fake.children[0].emit("close", null)
       killed = await a
       const b = io.runChild([], {}, "/repo", "[staging]")
-      fake.children[1].emit("error", new Error("spawn npx ENOENT"))
+      fake.children[1].emit("error", new Error("spawn node ENOENT"))
       failed = await b
     } finally {
       capture.restore()
@@ -772,11 +836,47 @@ test.describe("processIo with a fake spawn", () => {
     expect(killed).toBeNull()
     expect(failed).toBeNull()
     expect(capture.err).toEqual([
-      "[staging] could not start: spawn npx ENOENT\n",
+      "[staging] could not start: spawn node ENOENT\n",
     ])
   })
 
-  test("log prefixes with the command name; env is the process env; SIGINT and exit are wired", () => {
+  /**
+   * The listeners `register` added for each signal (and the output error
+   * listeners on stdout/stderr), all removed again after.
+   */
+  function addedListeners(
+    register: () => void,
+  ): Record<string, ((...args: unknown[]) => void)[]> {
+    const signals: NodeJS.Signals[] = [
+      "SIGINT",
+      "SIGTERM",
+      "SIGBREAK",
+      "SIGHUP",
+    ]
+    const streams = { stdout: process.stdout, stderr: process.stderr }
+    const before = Object.fromEntries([
+      ...signals.map((s) => [s, process.listeners(s)]),
+      ...Object.entries(streams).map(([n, st]) => [n, st.listeners("error")]),
+    ])
+    register()
+    const added: Record<string, ((...args: unknown[]) => void)[]> = {}
+    for (const s of signals) {
+      const fresh = process.listeners(s).filter((l) => !before[s].includes(l))
+      for (const l of fresh) process.off(s, l)
+      added[s] = fresh as unknown as ((...args: unknown[]) => void)[]
+    }
+    for (const [n, st] of Object.entries(streams)) {
+      added[n] = st
+        .listeners("error")
+        .filter((l) => !before[n].includes(l)) as ((
+        ...args: unknown[]
+      ) => void)[]
+      for (const l of added[n]) st.off("error", l as never)
+    }
+    return added
+  }
+
+  test("log prefixes with the command name; env is the process env; SIGINT, SIGTERM and exit are wired", () => {
     const io = processIo("my-run", fakeSpawn().spawnFn)
     const logs: string[] = []
     const original = console.log
@@ -789,17 +889,20 @@ test.describe("processIo with a fake spawn", () => {
     expect(logs).toEqual(["[my-run] hello"])
     expect(io.env).toBe(process.env)
     expect(io.now()).toBeInstanceOf(Date)
+    expect(io.pid).toBe(process.pid)
+    expect(typeof io.clock?.()).toBe("number")
 
-    let hits = 0
-    const before = process.listenerCount("SIGINT")
-    const handler = () => {
-      hits++
-    }
-    io.onInterrupt(handler)
-    expect(process.listenerCount("SIGINT")).toBe(before + 1)
-    process.emit("SIGINT")
-    process.off("SIGINT", handler)
-    expect(hits).toBe(1)
+    const got: (string | undefined)[] = []
+    const added = addedListeners(() =>
+      io.onInterrupt((signal) => got.push(signal)),
+    )
+    expect(added.SIGINT).toHaveLength(1)
+    expect(added.SIGTERM).toHaveLength(1)
+    // No terminal: SIGHUP keeps its default (nohup works).
+    expect(added.SIGHUP).toHaveLength(0)
+    added.SIGINT[0]()
+    added.SIGTERM[0]()
+    expect(got).toEqual(["SIGINT", "SIGTERM"])
 
     const realExit = process.exit
     let code: number | undefined
@@ -812,6 +915,103 @@ test.describe("processIo with a fake spawn", () => {
       process.exit = realExit
     }
     expect(code).toBe(7)
+  })
+
+  test("on Windows Ctrl-Break is a stop signal too, and the stage is never signalled", async () => {
+    const fake = fakeSpawn()
+    const io = processIo("pipe", fake.spawnFn, {
+      ...LAUNCHER,
+      platform: "win32",
+      interactive: true,
+    })
+    expect(io.interactive).toBe(true)
+    const got: (string | undefined)[] = []
+    const added = addedListeners(() =>
+      io.onInterrupt((signal) => got.push(signal)),
+    )
+    added.SIGBREAK[0]()
+    // In a terminal, a hangup is a stop request too.
+    added.SIGHUP[0]()
+    expect(got).toEqual(["SIGBREAK", "SIGHUP"])
+    // A closed terminal's output errors never crash the pipeline; others do.
+    for (const stream of ["stdout", "stderr"]) {
+      expect(added[stream]).toHaveLength(1)
+      const onError = added[stream][0]
+      for (const code of ["EPIPE", "EIO", "ERR_STREAM_DESTROYED"]) {
+        onError(Object.assign(new Error(code), { code }))
+      }
+      expect(() => onError(new Error("disk full"))).toThrow("disk full")
+    }
+    const capture = captureStreams()
+    try {
+      const run = io.runChild(["test"], {}, "/repo", "[development]")
+      const kills: string[] = []
+      Object.assign(fake.children[0], {
+        kill: (signal: string) => (kills.push(signal), true),
+      })
+      expect(io.interruptChild?.()).toBe(false)
+      expect(kills).toEqual([])
+      fake.children[0].emit("close", 0)
+      await run
+    } finally {
+      capture.restore()
+    }
+  })
+
+  test("interruptChild sends SIGINT to the running stage; waitForChild and killChild", async () => {
+    const fake = fakeSpawn()
+    const io = processIo("pipe", fake.spawnFn, {
+      ...LAUNCHER,
+      platform: "linux",
+    })
+    // No stage: nothing to signal, nothing to wait for, nothing to kill.
+    expect(io.interruptChild?.()).toBe(false)
+    expect(await io.waitForChild?.(10)).toBe(true)
+    io.killChild?.()
+    const capture = captureStreams()
+    try {
+      const run = io.runChild(["test"], {}, "/repo", "[development]")
+      const kills: string[] = []
+      Object.assign(fake.children[0], {
+        kill: (signal: string) => {
+          kills.push(signal)
+          if (signal === "SIGKILL") throw new Error("already gone")
+          return true
+        },
+      })
+      expect(io.interruptChild?.()).toBe(true)
+      // Still running: the wait times out.
+      expect(await io.waitForChild?.(5)).toBe(false)
+      io.killChild?.()
+      expect(kills).toEqual(["SIGINT", "SIGKILL"])
+      const waiting = io.waitForChild?.(5000)
+      fake.children[0].emit("close", null)
+      expect(await waiting).toBe(true)
+      expect(await run).toBeNull()
+      // A child whose kill throws is reported as not signalled.
+      const second = io.runChild(["test"], {}, "/repo", "[development]")
+      Object.assign(fake.children[1], {
+        kill: () => {
+          throw new Error("EPERM")
+        },
+      })
+      expect(io.interruptChild?.()).toBe(false)
+      fake.children[1].emit("close", 1)
+      expect(await second).toBe(1)
+    } finally {
+      capture.restore()
+    }
+  })
+
+  test("schedule runs once after the delay, can be cancelled, and ignores delays beyond a timer's range", async () => {
+    const io = processIo("pipe", fakeSpawn().spawnFn)
+    const fired: string[] = []
+    io.schedule?.(1, () => fired.push("a"))
+    const cancel = io.schedule?.(1, () => fired.push("b"))
+    cancel?.()
+    io.schedule?.(2 ** 31, () => fired.push("never"))()
+    await new Promise((r) => setTimeout(r, 30))
+    expect(fired).toEqual(["a"])
   })
 })
 

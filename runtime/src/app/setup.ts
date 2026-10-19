@@ -7,6 +7,7 @@ import { type Env, envValue } from "../core/env.js"
 import { ConfigError } from "../core/errors.js"
 
 import type { AppAdapter } from "./adapter.js"
+import { runLifecycle, settleWithin } from "./lifecycle.js"
 import {
   type Persona,
   STATE_ENV_PREFIX,
@@ -24,7 +25,15 @@ import {
 //             Never retried.
 //   teardown: revokes every session (pass or fail): traces and the HTML
 //             report record the session cookie. A failed revoke is a loud
-//             warning, never a test failure.
+//             warning, never a test failure. A run stopped during setup
+//             (Ctrl-C, a CI's stop) runs the teardown while the sign-ins
+//             are still in flight, so the teardown first waits for them
+//             (up to 60 s): a session signed in after the stop is revoked
+//             too. The setup also registers its sign-out, which the summary
+//             reporter runs when the teardown was cut short (lifecycle.ts).
+
+/** How long the teardown waits for sign-ins still in flight. */
+const SETUP_WAIT_MS = 60_000
 
 /** What setup and teardown need to know about this run. */
 export interface RunPersonas<P extends string> {
@@ -194,30 +203,75 @@ export function createGlobalSetup<P extends string>(
 ): (config?: FullConfig) => Promise<void> {
   return async (config?: FullConfig) => {
     refuseRepeats(config)
-    const { chromium, request } = await import("@playwright/test")
-    const run = options.load()
-    if (run.target === "local") await options.adapter.prepareLocal?.()
-    const count = await signInAll(run, options.adapter, {
-      api: request,
-      launchBrowser: options.launchBrowser ?? chromium.launch.bind(chromium),
-      prefix: options.prefix,
-    })
-    console.log(
-      `[${options.logPrefix ?? "flowreel"}] ${run.target}${run.module ? ` (${run.module})` : ""}: signed in ${count} persona(s) for run ${envValue(process.env, "RUN_ID") ?? "(no run id)"}.`,
-    )
+    const state = runLifecycle()
+    const work = (async () => {
+      const { chromium, request } = await import("@playwright/test")
+      const run = options.load()
+      // The reporter's safety net: whatever sessions exist when it runs.
+      state.signOut = async () => {
+        await signOutAll(run, options.adapter, {
+          api: request,
+          prefix: options.prefix,
+          logPrefix: options.logPrefix,
+        })
+      }
+      state.signOutRun = null
+      state.signedOut = false
+      if (run.target === "local") await options.adapter.prepareLocal?.()
+      const count = await signInAll(run, options.adapter, {
+        api: request,
+        launchBrowser: options.launchBrowser ?? chromium.launch.bind(chromium),
+        prefix: options.prefix,
+      })
+      console.log(
+        `[${options.logPrefix ?? "flowreel"}] ${run.target}${run.module ? ` (${run.module})` : ""}: signed in ${count} persona(s) for run ${envValue(process.env, "RUN_ID") ?? "(no run id)"}.`,
+      )
+    })()
+    state.setup = work
+    try {
+      await work
+    } finally {
+      if (state.setup === work) state.setup = null
+    }
   }
 }
 
-/** A Playwright globalTeardown: signs every persona out (signOutAll). */
+/**
+ * A Playwright globalTeardown: signs every persona out (signOutAll). When
+ * the run was stopped while the global setup was still signing in, it
+ * first waits for those sign-ins (up to 60 s, then signs out what exists),
+ * so no session made after the stop is left behind. Records that the
+ * sign-out ran, so the summary reporter's safety net does not repeat it.
+ */
 export function createGlobalTeardown<P extends string>(
   options: GlobalHooksOptions<P>,
+  /** How long to wait for sign-ins still in flight (default 60 s). */
+  setupWaitMs = SETUP_WAIT_MS,
 ): () => Promise<void> {
   return async () => {
-    const { request } = await import("@playwright/test")
-    await signOutAll(options.load(), options.adapter, {
-      api: request,
-      prefix: options.prefix,
-      logPrefix: options.logPrefix,
+    const state = runLifecycle()
+    // Marked first: a reporter safety net that runs while this teardown
+    // still waits (it was cut short) waits for it instead of signing out a
+    // second time.
+    let finish: () => void = () => undefined
+    state.signOutRun = new Promise<void>((resolve) => {
+      finish = resolve
     })
+    if (state.setup && !(await settleWithin(state.setup, setupWaitMs))) {
+      console.warn(
+        `[${options.logPrefix ?? "flowreel"}] WARNING: the global setup was still signing in after ${Math.round(setupWaitMs / 1000)} s; signing out the sessions made so far.`,
+      )
+    }
+    try {
+      const { request } = await import("@playwright/test")
+      await signOutAll(options.load(), options.adapter, {
+        api: request,
+        prefix: options.prefix,
+        logPrefix: options.logPrefix,
+      })
+      state.signedOut = true
+    } finally {
+      finish()
+    }
   }
 }

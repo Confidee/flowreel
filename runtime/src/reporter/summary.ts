@@ -14,10 +14,21 @@ import type {
 } from "@playwright/test/reporter"
 
 import {
+  runLifecycle,
+  settleWithin,
+  waitForRestores,
+} from "../app/lifecycle.js"
+import {
   type FlowreelConfig,
   resultsDir as configResultsDir,
 } from "../config/define.js"
+import {
+  composeBudgetMs,
+  composeSkipReason,
+  stageDeadlineAt,
+} from "../core/deadline.js"
 import { envValue } from "../core/env.js"
+import { isPassive, markPassive } from "../core/passive.js"
 import {
   UNDO_JSON,
   type UndoSummary,
@@ -37,7 +48,10 @@ import type {
   TourVideoOutcome,
   TourVideoRequest,
 } from "../video/tour-video.js"
+import { withMediaSignal } from "../video/stop.js"
 import { type NarrationOutcome, narrationLine } from "../voice/narrator.js"
+
+import { installStageGuard } from "./guard.js"
 
 import {
   type ModuleDescriptor,
@@ -73,6 +87,12 @@ type PaceRecord = Pick<VideoPace, "pace" | "slowFactor">
 
 /** The run's console prefix when the project names none: "[flowreel]". */
 export const DEFAULT_LOG_PREFIX = "flowreel"
+
+/** The video outcome when a stop signal ended the composition. */
+const COMPOSITION_STOPPED = "video composition stopped (interrupted)"
+
+/** How long the sign-out safety net waits for restores and sign-ins. */
+const SIGN_OUT_WAIT_MS = 20_000
 
 /**
  * The summary reporter's options: the project's modules, where a run's
@@ -299,6 +319,21 @@ function undoJson(undo: UndoSummary) {
  * (<reason>)". The verdict is fixed before the video starts and nothing the
  * video does can change it.
  *
+ * A stop signal Playwright's runner no longer handles (from onBegin on,
+ * after its teardown: while the other reporters finish, or during
+ * composition) ends the composition, or skips it: every tool it started is
+ * stopped and the summary is rewritten with
+ * "video: not produced (video composition stopped (interrupted))". With a
+ * pipeline deadline (FLOWREEL_DEADLINE_AT) less than the compose budget
+ * away (60 s, FLOWREEL_COMPOSE_BUDGET_SEC), composition is skipped.
+ *
+ * Before anything else, onEnd makes sure the personas were signed out: when
+ * the global teardown did not do it (a second Ctrl-C or a kill cut the
+ * teardown short), it waits up to 20 s for pending restores in the run's
+ * undo ledger, then runs the sign-out the global setup registered, and says
+ * so loudly. The constructor installs the stage guard (installStageGuard)
+ * first, so SIGTERM and a vanished pipeline stop the run as Ctrl-C would.
+ *
  * summary.json also records the pace the videos were composed at (pace,
  * slowFactor) and the narration ("narration: <voice> (n lines, m
  * synthesized, k cached)" or "not produced (<reason>)"). After a demo-pace
@@ -329,10 +364,17 @@ export class SummaryReporter implements Reporter {
   })[] = []
   private readonly target: string
   private readonly tabulated: Set<string>
+  /** Aborted by a stop signal Playwright's runner no longer handles. */
+  private readonly stop = new AbortController()
+  /** When this reporter first acted on a stop signal (epoch ms). */
+  private stoppedAt: number | null = null
+  private stopListeners: [NodeJS.Signals, () => void][] = []
   private readonly roundTrip: RoundTripModule
   private readonly tour: TourModule | undefined
 
   constructor(private readonly options: SummaryReporterOptions) {
+    // First: the web server's start and the sign-ins are covered too.
+    installStageGuard(process.env, { logPrefix: options.config?.logPrefix })
     const { roundTrip, tour } = modulesByKind(options.modules)
     if (!options.config && !options.resultsDir) {
       throw new Error("SummaryReporter: give `config` or `resultsDir`.")
@@ -402,6 +444,61 @@ export class SummaryReporter implements Reporter {
 
   onBegin(): void {
     this.startedAt = new Date()
+    // From here on: after Playwright's teardown its Ctrl-C handling is gone,
+    // and the other reporters' onEnd run before this one's.
+    this.listenForStops()
+  }
+
+  async onExit(): Promise<void> {
+    this.stopListening()
+  }
+
+  /**
+   * Whether a SIGINT is Playwright's runner's to handle right now (a
+   * listener other than flowreel's passive ones exists). Protected for
+   * tests: a test worker always has a SIGINT listener of its own.
+   */
+  protected signalOwnedElsewhere(): boolean {
+    return process.listeners("SIGINT").some((l) => !isPassive(l))
+  }
+
+  /**
+   * Listens for stop signals the runner no longer handles (after its
+   * teardown): the first ends the video composition (and the sign-out
+   * net's wait); a second Ctrl-C a second or more later exits with 130,
+   * the escape a Ctrl-C would otherwise be. Idempotent.
+   */
+  private listenForStops(): void {
+    if (this.stopListeners.length > 0) return
+    const signals: NodeJS.Signals[] =
+      process.platform === "win32"
+        ? ["SIGINT", "SIGTERM", "SIGBREAK"]
+        : ["SIGINT", "SIGTERM"]
+    for (const signal of signals) {
+      const listener = markPassive(() => {
+        if (this.signalOwnedElsewhere()) return
+        const now = Date.now()
+        if (
+          signal !== "SIGTERM" &&
+          this.stoppedAt !== null &&
+          now - this.stoppedAt >= 1000
+        ) {
+          this.log(`${this.prefix} second Ctrl-C: stopping now.`)
+          process.exit(130)
+          return
+        }
+        this.stoppedAt ??= now
+        this.stop.abort()
+      })
+      process.on(signal, listener)
+      this.stopListeners.push([signal, listener])
+    }
+  }
+
+  private stopListening(): void {
+    for (const [signal, listener] of this.stopListeners.splice(0)) {
+      process.off(signal, listener)
+    }
   }
 
   onError(error: TestError): void {
@@ -667,6 +764,104 @@ export class SummaryReporter implements Reporter {
   async onEnd(
     result: FullResult,
   ): Promise<{ status?: FullResult["status"] } | undefined> {
+    // Playwright's own Ctrl-C handling is gone by now: a stop signal during
+    // onEnd ends the video composition instead of killing the process
+    // (listening since onBegin; here too for a run that never began).
+    this.listenForStops()
+    try {
+      await this.signOutIfNeeded(this.stop.signal)
+      return await this.report(result, this.stop.signal)
+    } finally {
+      this.stopListening()
+    }
+  }
+
+  /**
+   * The sign-out safety net: when the global teardown did not sign the
+   * personas out (the run was stopped and its teardown cut short), waits
+   * for sign-ins still in flight and for pending restores (up to 20 s each;
+   * restores use the sessions), then signs out, loudly. Never throws.
+   */
+  private async signOutIfNeeded(signal: AbortSignal): Promise<void> {
+    const state = runLifecycle()
+    if (state.signedOut || !state.signOut) return
+    const prefix = this.prefix
+    const shareWarning = `sign the personas out on ${this.target} (or wait for the session idle timeout) before sharing anything but summary.md.`
+    if (state.signOutRun) {
+      // The teardown started signing out and was cut short.
+      if (await settleWithin(state.signOutRun, SIGN_OUT_WAIT_MS)) return
+      this.log(
+        `${prefix} WARNING: the global teardown's sign-out did not finish: ${shareWarning}`,
+      )
+      return
+    }
+    this.log(
+      `${prefix} WARNING: the global teardown did not sign the personas out (the run was stopped before it could): signing them out now.`,
+    )
+    if (state.setup) await settleWithin(state.setup, SIGN_OUT_WAIT_MS)
+    const runId = this.runId()
+    const left = await waitForRestores(
+      this.resultsDir(runId),
+      runId,
+      SIGN_OUT_WAIT_MS,
+      signal,
+    )
+    if (left > 0) {
+      this.log(
+        `${prefix} ${left} shared-config restore(s) still pending; signing out anyway (undo.md lists them).`,
+      )
+    }
+    const run = state.signOut()
+    state.signOutRun = run
+    try {
+      await run
+      state.signedOut = true
+    } catch (error) {
+      this.log(
+        `${prefix} WARNING: the sign-out failed (${error instanceof Error ? error.message : String(error)}): ${shareWarning}`,
+      )
+    }
+  }
+
+  /**
+   * Runs one video composition unless it is stopped or skipped: resolves
+   * with `skipped(reason)` at once when the stop signal aborted (or when the
+   * pipeline's deadline leaves less than the compose budget), or as soon as
+   * it aborts during the work, whose tools then stop (withMediaSignal).
+   */
+  private compose<T>(
+    signal: AbortSignal,
+    work: () => Promise<T>,
+    skipped: (reason: string) => T,
+  ): Promise<T> {
+    const reason = signal.aborted
+      ? COMPOSITION_STOPPED
+      : composeSkipReason(
+          stageDeadlineAt(process.env),
+          Date.now(),
+          composeBudgetMs(process.env),
+        )
+    if (reason) return Promise.resolve(skipped(reason))
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => resolve(skipped(COMPOSITION_STOPPED))
+      signal.addEventListener("abort", onAbort, { once: true })
+      withMediaSignal(signal, work).then(
+        (value) => {
+          signal.removeEventListener("abort", onAbort)
+          resolve(value)
+        },
+        (error: unknown) => {
+          signal.removeEventListener("abort", onAbort)
+          reject(error)
+        },
+      )
+    })
+  }
+
+  private async report(
+    result: FullResult,
+    signal: AbortSignal,
+  ): Promise<{ status?: FullResult["status"] } | undefined> {
     // `--list`, empty runs and runs without a tabulated test leave no
     // evidence folder behind.
     if (!this.ranFlow && this.errors.length === 0) return undefined
@@ -784,17 +979,30 @@ export class SummaryReporter implements Reporter {
     // the full summary (with "composition did not finish").
     write()
     const gate = tests.find((t) => t.project === this.roundTrip.project)
+    /** A composition that did not run: its narration says why too. */
+    const notComposed = (why: string) => {
+      if (paced.narration.on)
+        summary.narration = { produced: false, reason: why }
+      return { produced: false as const, reason: why }
+    }
     if (isTour) {
-      const outcome: TourVideoOutcome = opts.produceTourVideos
-        ? await opts.produceTourVideos({
-            runId,
-            target,
-            pace: paced.pace,
-            dir,
-            startedAt: this.startedAt,
-            verdict,
-            features: this.tourFeatures,
-          })
+      const produceTour = opts.produceTourVideos
+      const outcome: TourVideoOutcome = produceTour
+        ? await this.compose(
+            signal,
+            () =>
+              produceTour({
+                runId,
+                target,
+                pace: paced.pace,
+                dir,
+                startedAt: this.startedAt,
+                verdict,
+                features: this.tourFeatures,
+                signal,
+              }),
+            notComposed,
+          )
         : { produced: false, reason: "no tour video composer configured" }
       summary.tourVideo = tourVideoSummary(dir, outcome, rel)
       if (outcome.narration) summary.narration = outcome.narration
@@ -815,22 +1023,28 @@ export class SummaryReporter implements Reporter {
       write()
     }
     if (!isTour) {
-      const outcome = await opts.produceVideo({
-        module: this.roundTrip.name,
-        runId,
-        target,
-        dir,
-        startedAt: this.startedAt,
-        verdict,
-        verdictReason: reason,
-        flow: this.roundTripRecording,
-        table: (gate?.steps ?? []).map((step) => ({
-          id: step.id,
-          status: step.status,
-          durationMs: step.durationMs,
-        })),
-        latenciesMs: latencies,
-      })
+      const outcome: VideoOutcome = await this.compose(
+        signal,
+        () =>
+          opts.produceVideo({
+            module: this.roundTrip.name,
+            runId,
+            target,
+            dir,
+            startedAt: this.startedAt,
+            verdict,
+            verdictReason: reason,
+            flow: this.roundTripRecording,
+            table: (gate?.steps ?? []).map((step) => ({
+              id: step.id,
+              status: step.status,
+              durationMs: step.durationMs,
+            })),
+            latenciesMs: latencies,
+            signal,
+          }),
+        notComposed,
+      )
       summary.video = videoSummary(dir, outcome, rel)
       if (outcome.narration) summary.narration = outcome.narration
       if (outcome.pace) summary.pace = outcome.pace

@@ -16,6 +16,9 @@ except the social preview, which is also a PNG.
 
 - `flowreel-mint-favicon.svg`: the symbol for browser tabs; it switches to
   the dark-mode colour by itself.
+- `flowreel-mint-banner.svg`: the logo on its own dark, rounded card, for
+  pages whose background you do not control (the npm page, and sites such
+  as Socket that show it on a dark theme).
 - `flowreel-mint-avatar.svg`: the white symbol on a mint square, for
   profile pictures and app icons.
 - `flowreel-social-preview-1280x640.png` (and `.svg`): the link preview

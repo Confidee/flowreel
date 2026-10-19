@@ -29,7 +29,74 @@ export interface PipelineOptions<M extends string = string> {
   keepDb: boolean
   /** --narration on|off (null = the default for the pace). */
   narration: "on" | "off" | null
+  /**
+   * --deadline (or FLOWREEL_DEADLINE): when the pipeline stops starting and
+   * running stages (null = no deadline). See {@link parseDeadline}.
+   */
+  deadline: Deadline | null
   help: boolean
+}
+
+/**
+ * A pipeline deadline: a duration from the pipeline's start, or an
+ * absolute time. `label` is the value as given, for the log.
+ */
+export type Deadline =
+  | { kind: "in"; ms: number; label: string }
+  | { kind: "at"; epochMs: number; label: string }
+
+/** Plain numbers from this value on are epoch milliseconds (2001-09-09). */
+const EPOCH_MS_FROM = 1e12
+
+const UNIT_MS: Record<string, number> = {
+  ms: 1,
+  s: 1000,
+  m: 60_000,
+  h: 3_600_000,
+}
+
+/**
+ * Parses a pipeline deadline: a duration from the pipeline's start (`90s`,
+ * `25m`, `1.5h`, `500ms`, or plain milliseconds such as `90000`), or an
+ * absolute time, as an ISO 8601 time with a zone
+ * (`2026-10-19T12:30:00Z`, `…+02:00`) or epoch milliseconds (a plain number
+ * of 13 digits or more). Throws a {@link UsageError} naming `source` (the
+ * flag or the variable) for anything else, a zero or negative duration, or
+ * an ISO time without a zone. Pure.
+ */
+export function parseDeadline(raw: string, source = "--deadline"): Deadline {
+  const value = raw.trim()
+  const label = value
+  const duration = /^(\d+(?:\.\d+)?)(ms|s|m|h)?$/i.exec(value)
+  if (duration) {
+    const amount = Number(duration[1])
+    const unit = (duration[2] ?? "ms").toLowerCase()
+    if (!duration[2] && amount >= EPOCH_MS_FROM) {
+      return { kind: "at", epochMs: Math.round(amount), label }
+    }
+    const ms = Math.round(amount * UNIT_MS[unit])
+    if (ms <= 0) {
+      throw new UsageError(`${source} must be more than zero (got "${raw}").`)
+    }
+    return { kind: "in", ms, label }
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) {
+      throw new UsageError(
+        `${source} needs a zone on an ISO time (e.g. ${value}Z or ${value}+02:00).`,
+      )
+    }
+    const epochMs = Date.parse(value)
+    if (Number.isFinite(epochMs)) return { kind: "at", epochMs, label }
+  }
+  throw new UsageError(
+    `${source} needs a duration from the start (90s, 25m, 1h, or milliseconds) or a time (an ISO time with a zone, or epoch milliseconds); got "${raw}".`,
+  )
+}
+
+/** The deadline's epoch milliseconds for a pipeline that started at `startMs`. */
+export function deadlineAt(deadline: Deadline, startMs: number): number {
+  return deadline.kind === "in" ? startMs + deadline.ms : deadline.epochMs
 }
 
 export class UsageError extends Error {
@@ -64,6 +131,8 @@ export interface PipelineArgsSpec<M extends string> {
  * value, a value on a flag that takes none, --local with --staging-only,
  * or a tour-only flag (--area, --pace, --keep-db) on a module that is not
  * a tour; the project's parseAreas / parsePace word their own refusals.
+ * `--deadline` is parsed by {@link parseDeadline} (FLOWREEL_DEADLINE, its
+ * fallback, is read by the runner).
  * `--help` / `-h` sets `help`.
  */
 export function parsePipelineArgs<M extends string>(
@@ -80,6 +149,7 @@ export function parsePipelineArgs<M extends string>(
     pace: null,
     keepDb: false,
     narration: null,
+    deadline: null,
     help: false,
   }
   for (let i = 0; i < argv.length; i++) {
@@ -160,6 +230,16 @@ export function parsePipelineArgs<M extends string>(
           throw new UsageError("--narration needs on or off.")
         }
         options.narration = value
+        break
+      }
+      case "--deadline": {
+        const value = inline ?? argv[++i]
+        if (!value || value.startsWith("--")) {
+          throw new UsageError(
+            "--deadline needs a duration or a time (e.g. --deadline 25m).",
+          )
+        }
+        options.deadline = parseDeadline(value)
         break
       }
       case "--help":

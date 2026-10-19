@@ -10,8 +10,9 @@
 // passed; 1 any FAIL; 2 development passed but staging is not configured;
 // 3 a stage that ran was N/A (nothing verified); 4 a shared-config change
 // could not be put back (the undo ledger: manual action needed; it outranks
-// every other code). 130 = interrupted (Ctrl-C) before every stage that
-// would have run did. 64 = bad arguments.
+// every other code). 130 = stopped (Ctrl-C, a CI's stop signal or the
+// --deadline) before every stage that would have run did, or aborted by a
+// second Ctrl-C. 64 = bad arguments.
 
 export type StageName = "development" | "staging"
 export const STAGES: StageName[] = ["development", "staging"]
@@ -40,13 +41,51 @@ export const EXIT = {
   interrupted: 130,
 } as const
 
-/** The reason a stage records when Ctrl-C stopped the pipeline before it. */
-const INTERRUPTED = "not run (interrupted)"
+/**
+ * Why the pipeline stopped starting stages: a stop signal (Ctrl-C, a CI's
+ * SIGTERM) or the --deadline.
+ */
+export type StopCause = "interrupted" | "deadline"
 
-/** Whether development runs at all. */
-export function developmentDecision(options: {
-  stagingOnly: boolean
-}): { run: true } | { run: false; result: StageResult } {
+/** The reason a stage records when the pipeline stopped before it. */
+export const STOP_REASONS: Readonly<Record<StopCause, string>> = {
+  interrupted: "not run (interrupted)",
+  deadline: "not run (deadline reached)",
+}
+
+/**
+ * The reason the running stage records when a second Ctrl-C aborted the
+ * pipeline without waiting for the stage's report.
+ */
+export const ABORTED_REASON = "aborted by a second Ctrl-C"
+
+/** `true` (the earlier boolean form) reads as "interrupted". */
+function stopCause(stopped: boolean | StopCause): StopCause | null {
+  if (stopped === true) return "interrupted"
+  return stopped === false ? null : stopped
+}
+
+/**
+ * Whether development runs at all: not with --staging-only, and not once
+ * the pipeline was stopped (a signal or the deadline before it started).
+ */
+export function developmentDecision(
+  options: {
+    stagingOnly: boolean
+  },
+  stopped: boolean | StopCause = false,
+): { run: true } | { run: false; result: StageResult } {
+  const cause = stopCause(stopped)
+  if (cause && !options.stagingOnly) {
+    return {
+      run: false,
+      result: {
+        stage: "development",
+        verdict: "not run",
+        reason: STOP_REASONS[cause],
+      },
+    }
+  }
   if (!options.stagingOnly) return { run: true }
   return {
     run: false,
@@ -61,20 +100,22 @@ export function developmentDecision(options: {
 /**
  * The gate: staging runs only after a development PASS. `configProblem` is
  * the staging config error (null = configured); it is only looked at once
- * staging would otherwise run.
+ * staging would otherwise run. `stopped` (a stop signal, `true` or
+ * "interrupted", or "deadline") means no further stage starts.
  */
 export function stagingDecision(
   options: { local: boolean; stagingOnly: boolean },
   development: StageResult,
   configProblem: string | null,
-  interrupted = false,
+  stopped: boolean | StopCause = false,
 ): { run: true } | { run: false; result: StageResult } {
   const skip = (verdict: StageVerdict, reason: string) => ({
     run: false as const,
     result: { stage: "staging" as const, verdict, reason },
   })
   if (options.local) return skip("skipped", "skipped (--local)")
-  if (interrupted) return skip("not run", INTERRUPTED)
+  const cause = stopCause(stopped)
+  if (cause) return skip("not run", STOP_REASONS[cause])
   if (!options.stagingOnly && development.verdict !== "PASS") {
     return skip("not run", `not run (development ${development.verdict})`)
   }
@@ -112,8 +153,9 @@ export function stageLabel(result: Pick<StageResult, "verdict" | "reason">) {
  *
  * Exit codes count only the stages that ran: 0 every one passed, 1 any
  * FAIL, 2 development passed but staging is not configured, 3 a stage that
- * ran was N/A, 130 Ctrl-C stopped the pipeline before a stage that would
- * have run; 4 (a shared-config change was not put back: manual action
+ * ran was N/A, 130 a stop (Ctrl-C, a CI's stop signal, the --deadline)
+ * before a stage that would have run, or a second Ctrl-C that aborted the
+ * running stage; 4 (a shared-config change was not put back: manual action
  * needed) outranks them all, and the reason then starts with "UNDO
  * FAILED". Pure.
  */
@@ -133,6 +175,15 @@ export function pipelineOutcome(stages: StageResult[]): {
       .join("; ")}). ${outcome.reason}`,
     exitCode: EXIT.undoFailed,
   }
+}
+
+/** How a stopped stage reads in the pipeline's reason, or null. */
+function stopWording(stage: StageResult): string | null {
+  if (stage.verdict !== "not run") return null
+  if (stage.reason === STOP_REASONS.interrupted) return "interrupted before"
+  if (stage.reason === STOP_REASONS.deadline) return "deadline reached before"
+  if (stage.reason === ABORTED_REASON) return `${ABORTED_REASON} during`
+  return null
 }
 
 function verdictOutcome(stages: StageResult[]): {
@@ -160,17 +211,19 @@ function verdictOutcome(stages: StageResult[]): {
       exitCode: EXIT.notApplicable,
     }
   }
-  // Ctrl-C before a stage that would have run: never a PASS.
-  const stopped = stages.find(
-    (s) => s.verdict === "not run" && s.reason === INTERRUPTED,
-  )
+  // Stopped before (or, by a second Ctrl-C, during) a stage that would
+  // have run: never a PASS.
+  const stopped = stages
+    .map((s) => ({ stage: s.stage, what: stopWording(s) }))
+    .find((s) => s.what !== null)
   if (stopped) {
+    const what = `${stopped.what} ${stopped.stage}`
     return {
       verdict: "INCOMPLETE",
       reason:
         ran.length > 0
-          ? `${named(ran)} passed; interrupted before ${stopped.stage}.`
-          : `Interrupted before ${stopped.stage}.`,
+          ? `${named(ran)} passed; ${what}.`
+          : `${what[0].toUpperCase()}${what.slice(1)}.`,
       exitCode: EXIT.interrupted,
     }
   }
