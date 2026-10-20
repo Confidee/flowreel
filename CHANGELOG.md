@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+A stopped run keeps its evidence. CI stop signals, a pipeline that dies
+and the new `--deadline` all stop the running stage the way Ctrl-C does,
+so its video, trace, sign-out and report survive, and a stopped run is
+never a pass. Also: the npm page's logo reads on dark themes.
+
 ### Added
 
 - `--deadline` (or `FLOWREEL_DEADLINE`) for the pipeline: a duration from
@@ -354,6 +361,7 @@ plugin with its marketplace entry, the docs and the Rails seam kit.
   [docs/plugin.md](docs/plugin.md) listing it, and instructions injected
   into the model's context through the session-start check's output.
 
-[Unreleased]: https://github.com/Confidee/flowreel/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Confidee/flowreel/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Confidee/flowreel/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Confidee/flowreel/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Confidee/flowreel/releases/tag/v0.2.0
