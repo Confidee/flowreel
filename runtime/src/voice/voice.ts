@@ -13,6 +13,7 @@ import {
 import { join, resolve } from "node:path"
 
 import { type Env, envName, envVar } from "../core/env.js"
+import { mediaSignal, stoppedError } from "../video/stop.js"
 
 // Voice engines for the narrated demo videos. An engine turns one sentence into a
 // loudness-normalised mono WAV and says how long it is. The text is DATA:
@@ -37,14 +38,24 @@ export type Exec = (
   timeoutMs?: number,
 ) => Promise<string>
 
-export const runTool: Exec = (tool, args, timeoutMs = 60_000) =>
-  new Promise((done, fail) => {
+export const runTool: Exec = (tool, args, timeoutMs = 60_000) => {
+  // A stopped video composition (mediaSignal) ends the tool.
+  const signal = mediaSignal()
+  if (signal?.aborted) return Promise.reject(new Error(`${tool} stopped`))
+  return new Promise((done, fail) => {
     execFile(
       tool,
       args,
-      { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, encoding: "utf8" },
+      {
+        timeout: timeoutMs,
+        maxBuffer: 8 * 1024 * 1024,
+        encoding: "utf8",
+        signal,
+      },
       (error, stdout, stderr) => {
-        if (error) {
+        if (stoppedError(error)) {
+          fail(new Error(`${tool} stopped`))
+        } else if (error) {
           const detail = stderr.trim().split("\n").slice(-2).join(" | ")
           fail(new Error(`${tool} failed: ${detail || error.message}`))
         } else {
@@ -53,6 +64,7 @@ export const runTool: Exec = (tool, args, timeoutMs = 60_000) =>
       },
     )
   })
+}
 
 export interface VoiceEngine {
   /** "macos", "none", … */

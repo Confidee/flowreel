@@ -3,6 +3,7 @@
 import { chromium } from "@playwright/test"
 
 import { FRAME, OUTPUT_SCALE } from "./geometry.js"
+import { mediaSignal } from "./stop.js"
 
 // Renders card/caption HTML to 1920x1080 PNGs (laid out at 1280x720, 1.5x).
 // Runs in the reporter process after the
@@ -17,9 +18,21 @@ export interface PngJob {
   transparent?: boolean
 }
 
+/**
+ * Renders each job to its PNG in one unrecorded browser context. A stopped
+ * composition (mediaSignal) closes the browser, which ends the render with
+ * an error; one stopped before it starts launches nothing.
+ */
 export async function renderPngs(jobs: PngJob[]): Promise<void> {
+  const signal = mediaSignal()
+  if (signal?.aborted) throw new Error("card rendering stopped")
   const browser = await chromium.launch()
+  const stop = () => {
+    browser.close().catch(() => undefined)
+  }
+  signal?.addEventListener("abort", stop, { once: true })
   try {
+    if (signal?.aborted) throw new Error("card rendering stopped")
     const context = await browser.newContext({
       // Laid out at FRAME, painted at OUTPUT (Full HD) pixels.
       viewport: { width: FRAME.width, height: FRAME.height },
@@ -35,6 +48,7 @@ export async function renderPngs(jobs: PngJob[]): Promise<void> {
     }
     await context.close()
   } finally {
+    signal?.removeEventListener("abort", stop)
     await browser.close()
   }
 }

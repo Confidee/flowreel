@@ -19,6 +19,7 @@ import {
   probeDuration,
   programSec,
 } from "./ffmpeg.js"
+import { withMediaSignal } from "./stop.js"
 import type { VideoKit } from "./kit.js"
 import { type VideoLogData, videoEnabled, videoOffReason } from "./recorder.js"
 import {
@@ -75,6 +76,11 @@ export interface VideoRequest {
   /** The summary's per-step table (plan steps included, run or not). */
   table: OutroStep[]
   latenciesMs: Record<string, unknown>
+  /**
+   * Stops the composition: every tool it started ends and the outcome is
+   * not produced. The summary reporter passes one that aborts on Ctrl-C.
+   */
+  signal?: AbortSignal
 }
 
 /** What produceVideo returns (it never throws): the MP4, or why there is none. */
@@ -203,10 +209,18 @@ const firstLine = (message: unknown) => {
  * verdict: video off (FLOWREEL_VIDEO=off), no ffmpeg, no recording or any
  * failure is { produced: false, reason }.
  */
-export async function produceVideo(
+export function produceVideo(
   req: VideoRequest,
   kit: VideoKit,
   env: Env = process.env,
+): Promise<VideoOutcome> {
+  return withMediaSignal(req.signal, () => composeRunVideo(req, kit, env))
+}
+
+async function composeRunVideo(
+  req: VideoRequest,
+  kit: VideoKit,
+  env: Env,
 ): Promise<VideoOutcome> {
   const pace = videoPaceFor("round-trip", env)
   const paced = { pace: pace.pace, slowFactor: pace.slowFactor }

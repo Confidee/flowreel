@@ -6,6 +6,108 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Added
+
+- `--deadline` (or `FLOWREEL_DEADLINE`) for the pipeline: a duration from
+  its start (`25m`, `90s`, `1h`, milliseconds) or a time (an ISO time with
+  a zone, epoch milliseconds). At the deadline the running stage is
+  stopped the way Ctrl-C stops it, no further stage starts
+  (`not run (deadline reached)`) and no combined video is made (one being
+  composed is stopped); exit 130, unless a FAIL (1) or an undo failure (4)
+  outranks it. A deadline already past at the start runs nothing (no
+  database copy, no stage). Stages get
+  `FLOWREEL_DEADLINE_AT` and skip their own video when less than 60 s
+  (`FLOWREEL_COMPOSE_BUDGET_SEC`) is left. No default. A bad value is a
+  usage error (64). New exports: `parseDeadline`, `deadlineAt`,
+  `STOP_REASONS`, `ABORTED_REASON`.
+- The stage guard, `installStageGuard()` from `@confidee/flowreel/reporter`,
+  installed by the summary reporter first thing: SIGTERM (and Ctrl-Break
+  on Windows) stops a run the way Ctrl-C does (or exits 130 before
+  Playwright's runner listens); a stage whose pipeline is gone
+  (`FLOWREEL_PIPELINE_PID`) stops itself within about a second; a hangup
+  stops it gracefully when the pipeline runs in a terminal
+  (`FLOWREEL_HUP=graceful`); output to a pipe whose reader is gone no
+  longer crashes it. Only the first stop request becomes a Ctrl-C, so a
+  later one never cuts the teardown short.
+- `pipeline.json` is written ahead, with a `status`: `running` from the
+  start (stages `pending`, verdict `INCOMPLETE`, `finishedAt` null),
+  rewritten as each stage starts and ends, `stopping` after the first stop
+  request (with `stoppedBy`), `finished` at the end and `aborted` after a
+  second Ctrl-C. Every write is atomic. Any status but `finished` means
+  the pipeline did not finish; the explain skill and the run-explainer
+  agent say so.
+
+### Changed
+
+- The npm page shows the logo on its own dark card
+  (`assets/brand/flowreel-mint-banner.svg`), so it reads on light and dark
+  pages alike; the dark-text logo was nearly invisible where the README is
+  shown on a dark theme, such as Socket (#12).
+- **BREAKING:** a stage now runs Playwright's own command-line entry
+  (`@playwright/test/cli`, resolved from the project) with the pipeline's
+  Node, not `npx`; `npx --no-install playwright` is the fallback when the
+  entry cannot be resolved, and the log says which. `stageCommand()`
+  returns Playwright's arguments (`test …`) without the `npx` prefix, and
+  `processIo()` adds the launcher: a custom `PipelineIo.runChild` must do
+  the same. `playwrightLauncher()` and `resolvePlaywrightCli()` are new
+  exports.
+- `PipelineIo` takes optional `interruptChild`, `waitForChild`,
+  `killChild`, `clock`, `schedule`, `pid` and `interactive`, and its
+  `onInterrupt` handler receives the signal. `PipelineDocument` has
+  `status` and `stoppedBy`, and its `finishedAt` is null until the
+  pipeline finished.
+- `createConfig()` sets `handleSIGTERM: false` in the browsers' launch
+  options (a project's own launch options keep it unless they set it): a
+  browser no longer closes itself when a CI signals the job's whole
+  process group, so the running test's video is kept; the runner closes it
+  in its graceful stop.
+- A stopped pipeline is never a pass: when a stop (a signal or the
+  deadline) came and the stages that ran passed (a `--local` run, a stop
+  during the combined video), the pipeline is `INCOMPLETE` with exit 130
+  and a reason naming the stop.
+- In a terminal, a hangup (SIGHUP) is a stop request for the pipeline and
+  the stage, and the pipeline ignores the closed terminal's output errors
+  so it can still write `pipeline.json`. Without a terminal SIGHUP keeps
+  its default.
+
+### Fixed
+
+- A CI job that is cancelled or runs out of time no longer loses the run
+  (issue #11). The pipeline handles SIGINT, SIGTERM and, on Windows,
+  Ctrl-Break: the first stop asks the running stage to stop as Ctrl-C
+  does (on POSIX it sends the stage SIGINT, the one signal Playwright's
+  runner stops gracefully on), so the browser closes and the test's video
+  and trace are saved, the personas are signed out and the stage writes
+  its summary; no further stage starts and no combined video is made. The
+  same signal within 200 ms counts once; a SIGTERM after the first stop
+  never forces (GitHub Actions sends SIGINT, then SIGTERM 7.5 s later);
+  only a second Ctrl-C forces: the final pipeline files are written, the
+  stage gets 3 s to close before it is killed, the database copy is
+  dropped and the pipeline exits 130 (4 when a restore is still pending).
+- A stage whose pipeline was killed outright no longer runs on orphaned or
+  crashes on its next log line: it stops gracefully within about a second.
+- A stop signal during video composition ends it at once (ffmpeg, the
+  voice engine and the card renderer's browser are stopped) instead of
+  killing the run mid-encode; the summary says
+  `video: not produced (video composition stopped (interrupted))`. This
+  holds for a stage's video (the reporter listens from the start of the
+  run, so a signal that lands after Playwright's teardown, while the other
+  reporters finish, no longer kills the stage before its summary; a second
+  Ctrl-C a second later exits 130) and for the pipeline's combined video.
+- A run stopped during sign-in no longer leaves that session live: the
+  global teardown waits (up to 60 s) for sign-ins still in flight before
+  signing out. When the teardown was cut short, the summary reporter waits
+  for its sign-out, or signs the personas out itself (after waiting up to
+  20 s for pending restores) and says so loudly; the personas are never
+  signed out twice.
+- Ctrl-Break on Windows stops a run gracefully instead of killing it, and
+  on Windows the stage stops itself at the deadline (the pipeline cannot
+  signal it there).
+- A stage no longer goes through `npx`, which cannot be spawned without a
+  shell on Windows (`EINVAL` since Node 20.12). There is no npx fallback on
+  Windows: a project without a resolvable `@playwright/test` gets a
+  message saying to install it.
+
 ## [0.2.1] - 2026-10-16
 
 Documentation and release tooling only; the runtime's behaviour is

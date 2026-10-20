@@ -95,9 +95,11 @@ your project
 ├── tour        TourManifest, catalogue and static tripwire, feature() policy wrapper
 │               (both | dev | view | both+undo), pace, inbound budget, tourFixtures(),
 │               tourModuleFrom() (the reporter's TourModule from the same constants)
-├── pipeline    development -> staging stages, gate, exit codes (0/1/2/3/4/64/130), DbIsolation
+├── pipeline    development -> staging stages, gate, exit codes (0/1/2/3/4/64/130), DbIsolation,
+│               stop signals and the --deadline, write-ahead pipeline.json
 ├── mail        MailDriver contract, matcher, send-domain guard
-├── reporter    summary.md/json, feature table, undo section, ModuleDescriptor
+├── reporter    summary.md/json, feature table, undo section, ModuleDescriptor,
+│               the stage guard (SIGTERM and a vanished pipeline stop a run as Ctrl-C would)
 ├── video       timeline, cards (Brand + CardCopy), ffmpeg composer, run/tour/pipeline reels
 ├── voice       VoiceEngine (macOS `say` | none), narration resolution, clip cache
 ├── demos       publish a run's videos to <demos>/latest with a README

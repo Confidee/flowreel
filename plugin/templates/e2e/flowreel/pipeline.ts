@@ -23,14 +23,15 @@ import { TOUR_MODULE, TOUR_VIDEO } from "./modules"
 import { TOUR } from "./tour"
 
 // `npm run flowreel -- [--module smoke|tour] [--local | --staging-only]
-// [--headed] [--no-video] [--narration on|off]` (tour: [--area A,C]
-// [--pace demo|qa] [--keep-db]). Stage 1 "development" runs on the local
+// [--headed] [--no-video] [--narration on|off] [--deadline 25m]` (tour:
+// [--area A,C] [--pace demo|qa] [--keep-db]). Stage 1 "development" runs on the local
 // server; stage 2 "staging" runs ONLY after a development PASS. Each stage
 // is its own Playwright child with its own run id and a clean env (only
 // staging gets the secrets); nothing is ever retried. Results:
 // flowreel-results/<PIPELINE_ID>/pipeline.{md,json} plus each stage's run
 // folder. Exit codes: 0 pass, 1 fail, 2 staging not configured, 3 N/A,
-// 4 undo failed (manual action), 64 bad arguments, 130 interrupted.
+// 4 undo failed (manual action), 64 bad arguments, 130 stopped (Ctrl-C, a
+// CI's stop signal or --deadline).
 
 const ROOT = process.cwd()
 
@@ -44,7 +45,7 @@ const spec: PipelineSpec<Module, StageSummary> = {
   repoRoot: ROOT,
   playwrightConfig: "e2e/flowreel/playwright.config.ts",
   usage:
-    "Usage: npm run flowreel -- [--module smoke|tour] [--local | --staging-only] [--headed] [--no-video] [--narration on|off] [--area A,C] [--pace demo|qa] [--keep-db]",
+    "Usage: npm run flowreel -- [--module smoke|tour] [--local | --staging-only] [--headed] [--no-video] [--narration on|off] [--area A,C] [--pace demo|qa] [--keep-db] [--deadline 25m]",
   resultsDir: (id) => resultsDir(flowreel, id),
   makeRunId: (target) => makeRunId(target),
   makePipelineId: () => makePipelineId(),

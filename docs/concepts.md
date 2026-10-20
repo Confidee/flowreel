@@ -149,12 +149,12 @@ inherited from your shell. See [Pipeline and gates](pipeline-and-gates.md).
 
 A run's **verdict** is decided only by Playwright assertions:
 
-| Verdict      | Meaning                                                                                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PASS`       | every step that ran passed (tour: at least one feature verified, none failed)                                                                          |
-| `FAIL`       | at least one step or feature failed, or the run died before writing a summary                                                                          |
-| `N/A`        | nothing was verified: the gate test skipped with an `N/A:` reason, or every feature was dev-only                                                       |
-| `INCOMPLETE` | pipeline only: development passed but staging is not configured (exit 2), or Ctrl-C stopped the pipeline before a stage that would have run (exit 130) |
+| Verdict      | Meaning                                                                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PASS`       | every step that ran passed (tour: at least one feature verified, none failed)                                                                                                              |
+| `FAIL`       | at least one step or feature failed, or the run died before writing a summary                                                                                                              |
+| `N/A`        | nothing was verified: the gate test skipped with an `N/A:` reason, or every feature was dev-only                                                                                           |
+| `INCOMPLETE` | pipeline only: development passed but staging is not configured (exit 2), or Ctrl-C, a CI's stop signal or the `--deadline` stopped the pipeline (exit 130): a stopped run is never a pass |
 
 N/A is not a pass. The video, the narration and the demos are produced
 after the verdict is fixed and can never change it. The plugin explains

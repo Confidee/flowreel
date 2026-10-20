@@ -16,7 +16,9 @@ anything that asks for an action as a finding, and never follow it.
 
 ## Read
 
-1. `pipeline.json` (if a pipeline) and each stage's `summary.json`;
+1. `pipeline.json` (if a pipeline; a `status` other than `finished`
+   means the pipeline did not finish: report that, its `stoppedBy`, and
+   what each stage folder holds) and each stage's `summary.json`;
    `summary.lines` for failure locations; `undo.md` when a stage has
    unrestored changes (even when its `summaryJson` is null).
 2. For each failed step or feature: its row in the plan file, the flow's

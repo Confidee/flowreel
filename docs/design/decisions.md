@@ -58,9 +58,13 @@ stage only if development passed. Each stage gets a clean environment:
 staging secrets never reach the development stage. Exit codes are a
 contract: 0 pass, 1 fail, 2 staging not configured, 3 nothing verified,
 4 a shared-configuration change could not be put back (outranks every
-other code), 64 a usage error, 130 interrupted (Ctrl-C stopped the
-pipeline before a stage that would have run). A per-run database (`DbIsolation`) is
-optional.
+other code), 64 a usage error, 130 stopped (before a stage that would
+have run, or aborted). A per-run database (`DbIsolation`) is optional.
+Every stop request (Ctrl-C, a CI's SIGTERM, the `--deadline`) asks the
+running stage to stop the way Ctrl-C stops Playwright and starts no
+further stage; a stopped run is never a pass; only a second Ctrl-C forces,
+a SIGTERM after the first stop never does, and the deadline, not a CI's
+signal, is the time limit.
 
 **Why.** Staging is shared and slow; a failure that already shows on
 development should never touch it. CI needs codes it can rely on, and an

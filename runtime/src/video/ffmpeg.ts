@@ -4,6 +4,7 @@ import { execFile, execFileSync } from "node:child_process"
 import { join } from "node:path"
 
 import { APP_RECT, OUTPUT, OUTPUT_SCALE } from "./geometry.js"
+import { mediaSignal, stoppedError } from "./stop.js"
 import type { Timeline } from "./timeline.js"
 
 // ffmpeg composer for the run video. One
@@ -304,14 +305,25 @@ export function ffmpegProblem(): string | null {
   return null
 }
 
+// A stopped composition (mediaSignal) ends the tool and rejects with
+// "<tool> stopped".
 function run(tool: string, args: string[], timeoutMs: number): Promise<string> {
+  const signal = mediaSignal()
+  if (signal?.aborted) return Promise.reject(new Error(`${tool} stopped`))
   return new Promise((resolvePromise, reject) => {
     execFile(
       tool,
       args,
-      { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, encoding: "utf8" },
+      {
+        timeout: timeoutMs,
+        maxBuffer: 16 * 1024 * 1024,
+        encoding: "utf8",
+        signal,
+      },
       (error, stdout, stderr) => {
-        if (error) {
+        if (stoppedError(error)) {
+          reject(new Error(`${tool} stopped`))
+        } else if (error) {
           const detail = stderr.trim().split("\n").slice(-3).join(" | ")
           reject(new Error(`${tool} failed: ${detail || error.message}`))
         } else {

@@ -173,3 +173,31 @@ test("localWebServer: ready path and timeout default, or come from the project",
     reuseExistingServer: false,
   })
 })
+
+// A CI signals the job's whole process group: a worker that closed its
+// browser on SIGTERM would lose the running test's video, so browsers leave
+// SIGTERM to the runner's graceful stop (issue #11). SIGHUP keeps
+// Playwright's default.
+test("browsers leave SIGTERM to the runner, in every project, unless one says otherwise", () => {
+  const config = createConfig({
+    ...BASE,
+    projects: [
+      { name: "plain" },
+      { name: "slow", use: { launchOptions: { slowMo: 100 } } },
+      { name: "own", use: { launchOptions: { handleSIGTERM: true } } },
+    ],
+  })
+  expect(config.use?.launchOptions).toEqual({
+    handleSIGTERM: false,
+    slowMo: 0,
+  })
+  expect(config.projects?.[0]).toEqual({ name: "plain" })
+  expect(config.projects?.[1].use?.launchOptions).toEqual({
+    handleSIGTERM: false,
+    slowMo: 100,
+  })
+  expect(config.projects?.[2].use?.launchOptions).toEqual({
+    handleSIGTERM: true,
+  })
+  expect(JSON.stringify(config)).not.toContain("handleSIGHUP")
+})

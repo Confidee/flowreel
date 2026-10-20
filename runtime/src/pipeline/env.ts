@@ -36,8 +36,35 @@ export interface StageEnvSpec {
   statePrefixes?: readonly string[]
 }
 
-/** The keys the pipeline sets per stage: never inherited. */
-const CONTROLLED_KEYS = ["TARGET", "RUN_ID", "MODULE", "DB_KEY"]
+/**
+ * The keys the pipeline sets per stage: never inherited. PIPELINE_PID, HUP
+ * and DEADLINE_AT tell the stage guard (installStageGuard) about the
+ * pipeline; DEADLINE is the pipeline's own setting, never a stage's.
+ */
+const CONTROLLED_KEYS = [
+  "TARGET",
+  "RUN_ID",
+  "MODULE",
+  "DB_KEY",
+  "PIPELINE_PID",
+  "HUP",
+  "DEADLINE",
+  "DEADLINE_AT",
+]
+
+/**
+ * What the pipeline tells each stage about itself (for the stage guard,
+ * installStageGuard): its process id, whether a hangup should stop the
+ * stage gracefully (the pipeline runs in a terminal), and its deadline.
+ */
+export interface StagePipelineEnv {
+  /** Written as PIPELINE_PID: the stage stops when this process is gone. */
+  pipelinePid?: number
+  /** Written as HUP=graceful: a SIGHUP stops the stage as Ctrl-C would. */
+  gracefulHangup?: boolean
+  /** Written as DEADLINE_AT (epoch ms): the stage budgets its video by it. */
+  deadlineAt?: number | null
+}
 
 /**
  * A clean environment for one stage's child process, built by the pipeline
@@ -51,8 +78,9 @@ const CONTROLLED_KEYS = ["TARGET", "RUN_ID", "MODULE", "DB_KEY"]
  * stage, every staging secret (`spec.isSecret`, the secrets-file and
  * base-URL keys), so a password injected for staging never reaches the
  * local run. Then writes the stage's values under each key's preferred
- * name, a 300 ms slowMo when headed and none is set, and, for the
- * development stage only, `extra` (its database copy). Pure: `base` is
+ * name, a 300 ms slowMo when headed and none is set, `pipeline` (the
+ * pipeline's pid, hangup mode and deadline, for the stage guard) and, for
+ * the development stage only, `extra` (its database copy). Pure: `base` is
  * not modified.
  */
 export function stageEnv(
@@ -66,6 +94,8 @@ export function stageEnv(
   extra: Record<string, string> = {},
   /** The module when options carry none. */
   defaultModule = "",
+  /** What the stage guard learns about the pipeline. */
+  pipeline: StagePipelineEnv = {},
 ): Record<string, string> {
   const controlled = new Set(CONTROLLED_KEYS.flatMap((key) => envNames(key)))
   const statePrefixes = [STATE_ENV_PREFIX, ...(spec.statePrefixes ?? [])]
@@ -99,6 +129,13 @@ export function stageEnv(
     !envNames("SLOW_MO").some((n) => env[n] !== undefined)
   ) {
     env[preferredEnvName("SLOW_MO")] = "300"
+  }
+  if (pipeline.pipelinePid !== undefined) {
+    set("PIPELINE_PID", String(pipeline.pipelinePid))
+  }
+  if (pipeline.gracefulHangup) set("HUP", "graceful")
+  if (typeof pipeline.deadlineAt === "number") {
+    set("DEADLINE_AT", String(Math.round(pipeline.deadlineAt)))
   }
   if (stage === "development") Object.assign(env, extra)
   return env

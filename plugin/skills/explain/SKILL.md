@@ -19,6 +19,11 @@ directory named by `results` in `flowreel.config.ts`).
 ## 1. Locate
 
 - Pipeline id: read its `pipeline.json`, then each stage's `summaryJson`.
+  Check its `status` first: anything but `finished` (`running`,
+  `stopping`, `aborted`) means the pipeline did not finish (it was
+  stopped, killed or is still running): say so, name `stoppedBy`, and
+  report what each stage folder holds (`resultsDir`, its `summary.json`
+  or `undo.md`) rather than a pipeline verdict.
 - Run id: read its `summary.json` (and `summary.md` for tables).
 - If several runs match or the newest is still running (no `summary.json`
   yet, or `video.reason` "composition did not finish"), say so and ask.

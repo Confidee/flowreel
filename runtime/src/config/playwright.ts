@@ -14,7 +14,15 @@ import type { TargetName } from "./targets.js"
 // own results folder (a shared report folder would keep only a pipeline's
 // last stage), the project's summary reporter, and global setup paired with
 // the teardown that signs every persona out (traces record the session
-// cookie).
+// cookie). Browsers do not close themselves on SIGTERM (`handleSIGTERM`
+// off, unless a project sets it): a CI signals a job's whole process group,
+// and a worker that closed its browser on the spot would lose the running
+// test's video. The runner stops on SIGINT instead (the stage guard turns
+// SIGTERM into one) and closes the browsers in its teardown, so the video
+// is saved. SIGHUP keeps Playwright's default.
+
+/** Browsers leave SIGTERM to the runner's graceful stop. */
+const STOP_SIGNALS_TO_RUNNER = { handleSIGTERM: false }
 
 type Project = NonNullable<PlaywrightTestConfig["projects"]>[number]
 type Use = NonNullable<PlaywrightTestConfig["use"]>
@@ -93,10 +101,29 @@ export function createConfig(input: CreateConfigInput): PlaywrightTestConfig {
       screenshot: "on",
       actionTimeout: input.actionTimeout ?? 15_000,
       navigationTimeout: input.navigationTimeout ?? 30_000,
-      launchOptions: { ...input.use?.launchOptions, slowMo: input.slowMo },
+      launchOptions: {
+        ...STOP_SIGNALS_TO_RUNNER,
+        ...input.use?.launchOptions,
+        slowMo: input.slowMo,
+      },
     },
     ...(input.testIgnore ? { testIgnore: input.testIgnore } : {}),
-    projects: input.projects,
+    // A project's own launchOptions replace the shared ones: keep the
+    // signal settings in them too.
+    projects: input.projects.map((project) =>
+      project.use?.launchOptions
+        ? {
+            ...project,
+            use: {
+              ...project.use,
+              launchOptions: {
+                ...STOP_SIGNALS_TO_RUNNER,
+                ...project.use.launchOptions,
+              },
+            },
+          }
+        : project,
+    ),
     webServer: input.target === "local" ? input.webServer : undefined,
   }
 }

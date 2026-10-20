@@ -3,6 +3,7 @@
 import type { APIRequest, Browser, FullConfig } from "@playwright/test"
 import { expect, test } from "@playwright/test"
 
+import { resetRunLifecycle } from "../src/app/lifecycle.js"
 import {
   type AppAdapter,
   type SessionProtocol,
@@ -24,6 +25,10 @@ import {
 // global hooks, and the less common session protocols.
 
 const STATE = { cookies: [], origins: [] }
+
+// The global hooks register their sign-out on a process-wide lifecycle: a
+// test file that runs next in this worker must not inherit it.
+test.afterEach(() => resetRunLifecycle())
 
 function withEnv(set: Record<string, string>, body: () => Promise<void>) {
   return async () => {

@@ -13,15 +13,15 @@ Everything here is what flowreel WRITES; you report it, you never decide it.
 
 ## Exit codes (the pipeline command)
 
-| Code | Meaning                                                                                                                                                                |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | every stage that ran passed                                                                                                                                            |
-| 1    | a stage FAILED (development FAIL means staging did not run: the gate working)                                                                                          |
-| 2    | development passed, staging is **not configured** (its secrets are not in this shell)                                                                                  |
-| 3    | a stage that ran was N/A: nothing was verified                                                                                                                         |
-| 4    | **undo failed: manual action needed.** Outranks every other code. Also when a stage died before writing its summary but its `undo.json` still holds unrestored entries |
-| 64   | bad arguments (the usage line is printed)                                                                                                                              |
-| 130  | **interrupted** (Ctrl-C) before a stage that would have run: INCOMPLETE, never a pass; report what did run                                                             |
+| Code | Meaning                                                                                                                                                                                                           |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | every stage that ran passed                                                                                                                                                                                       |
+| 1    | a stage FAILED (development FAIL means staging did not run: the gate working)                                                                                                                                     |
+| 2    | development passed, staging is **not configured** (its secrets are not in this shell)                                                                                                                             |
+| 3    | a stage that ran was N/A: nothing was verified                                                                                                                                                                    |
+| 4    | **undo failed: manual action needed.** Outranks every other code. Also when a stage died before writing its summary but its `undo.json` still holds unrestored entries                                            |
+| 64   | bad arguments (the usage line is printed)                                                                                                                                                                         |
+| 130  | **stopped** (Ctrl-C, a CI's stop signal or the `--deadline`): before a stage that would have run, while every stage that ran passed, or aborted by a second Ctrl-C. INCOMPLETE, never a pass; report what did run |
 
 ## Folders
 
@@ -44,11 +44,24 @@ pipeline's own `pipeline.md`.
 
 ## pipeline.json
 
+`status`: `running`, `stopping`, `finished` or `aborted`. The file is
+written ahead and rewritten as the pipeline goes: **a status other than
+`finished` means the pipeline did not finish; report what the stage
+folders hold** (each stage's `summary.json`, or its `undo.md` when there
+is none) and never a pipeline verdict of your own. `stoppedBy` names what
+stopped it early (`Ctrl-C (SIGINT)`, `SIGTERM`, `the deadline (--deadline
+25m)`, `…, then a second Ctrl-C`), or is null. `finishedAt` is null until
+it finished.
+
 `verdict` (`PASS` | `FAIL` | `N/A` | `INCOMPLETE` = development passed
-but staging is not configured (exit 2), or Ctrl-C stopped the pipeline
-before a stage that would have run (exit 130)), `verdictReason`, `exitCode`, `options`, and
+but staging is not configured (exit 2), or a stop (Ctrl-C, a CI's stop
+signal, the deadline) stopped the pipeline and no stage failed: a stopped
+run is never a pass (exit 130)), `verdictReason`, `exitCode`, `options`, and
 `stages[]`, each with: `stage` (development | staging), `verdict` (`PASS`,
-`FAIL`, `N/A`, `not run`, `not configured`, `skipped`), `reason`, `runId`,
+`FAIL`, `N/A`, `not run`, `not configured`, `skipped`; while the
+pipeline runs, a stage not finished yet is `not run` with reason
+`pending`, `running` or `stopping`, and one cut off by a second Ctrl-C has
+reason `aborted by a second Ctrl-C`), `reason`, `runId`,
 `resultsDir`, `summary` / `summaryJson` (paths, or null when the stage
 never wrote one), `video`, `undoChanges`, `undoFailed`, `undoFile`,
 `durationMs`, `exitCode`. Plus `video` (the combined video: `produced`,

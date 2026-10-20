@@ -62,7 +62,8 @@ You type `/flowreel:run checkout` in Claude Code, or
 3. **The result.** `pipeline.md` puts both stages side by side, and the exit
    code reports the verdict: 0 pass, 1 fail, 2 staging not configured,
    3 nothing verified, 4 a shared-config change could not be put back,
-   64 bad arguments, 130 interrupted (Ctrl-C). See
+   64 bad arguments, 130 stopped (Ctrl-C, a CI's stop signal or the
+   `--deadline`). See
    [Exit codes](docs/pipeline-and-gates.md#exit-codes).
 4. **The video.** An MP4 at 1920x1080. A title card, then your app with a
    caption bar per step ("Checkout · The customer pays with a saved card ·
