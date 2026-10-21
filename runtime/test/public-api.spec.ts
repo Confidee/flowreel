@@ -416,6 +416,7 @@ const SURFACE: Record<string, string[]> = {
     "GRAPH_BASE",
     "GraphHttpError",
     "GraphMailDriver",
+    "GraphRequestTimeoutError",
     "headerAddresses",
     "toMailMessage",
   ],

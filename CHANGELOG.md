@@ -6,6 +6,40 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Added
+
+- `requestTimeoutMs` for `GraphMailDriver` (`@confidee/flowreel/mail-graph`):
+  every Graph and token request, from the connection to the last byte of
+  the body, gets at most this long (default 30 s), and inside `waitFor` no
+  more than the wait has left. A whole number of milliseconds from 1 to
+  2147483647; anything else is a `ConfigError`.
+- `GraphRequestTimeoutError` from `@confidee/flowreel/mail-graph`
+  (`operation`, `timeoutMs`, `mayHaveSent`): what a request that got no
+  answer throws. A `sendMail` or a reply's `send` sets `mayHaveSent` and
+  says the mail may have been sent; it is never retried.
+
+### Fixed
+
+- A Microsoft Graph request that never answered could stall a run (#16).
+  A hung request ended only at Node's `fetch` limit of 300 s, a body that
+  trickled in never ended, a hung token request held up every later call
+  until it ended, and `waitFor`'s own `timeoutMs` could not end a request
+  in flight. Now every request is bounded, a wait ends at its `timeoutMs`
+  (a read that got no answer is re-polled, and after the first attempt
+  none starts once no time is left), a timed-out token request is dropped
+  so the next call asks again, `health()` points at the network instead
+  of the credentials when a request got no answer, and a transport error
+  keeps its cause's error code (`fetch failed (ECONNREFUSED)`) and nothing
+  else of it.
+- `GraphMailDriver`: a 2xx answer whose body cannot be read now throws the
+  named, redacted transport error (`Graph <operation> failed: …`) instead of
+  the raw stream error, which could echo the access token.
+- `GraphMailDriver`: a token answer whose body is JSON `null` now fails with
+  "no access_token returned" instead of a bare `TypeError`.
+- `GraphMailDriver` redacts the client secret and the access token in their
+  URI-encoded and form-encoded forms too, so a transport error that echoes
+  the token request's body no longer carries the secret.
+
 ## [0.3.0] - 2026-10-20
 
 A stopped run keeps its evidence. CI stop signals, a pipeline that dies

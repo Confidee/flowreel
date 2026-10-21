@@ -20,7 +20,9 @@ import {
 // HTTP is a fake fetch; nothing leaves the process.
 
 const TOKEN = "eyJ.fake-access-token.sig"
-const SECRET = "client-secret-value"
+// A client secret with the characters that encoding changes (~ + / = and a
+// space), so a check for it also covers its encoded forms.
+const SECRET = "Abc8Q~x+y/z= END"
 const MAILBOX = "qa@example.com"
 const REPLY_DOMAIN = "reply.example.com"
 const TOKEN_URL = "https://login.microsoftonline.com/tenant-1/oauth2/v2.0/token"
@@ -408,7 +410,9 @@ test.describe("defaults", () => {
         clientSecret: SECRET,
         mailbox: MAILBOX,
         replyDomain: REPLY_DOMAIN,
-        defaultTimeoutMs: 300,
+        // Longer than poll's first 1 s back-off: no read is started once the
+        // wait has no time left, so the re-poll must fall before the deadline.
+        defaultTimeoutMs: 1_500,
       })
       const error = await d
         .waitFor({ subjectIncludes: "RQ", since: new Date() })
