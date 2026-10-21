@@ -3,7 +3,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
-import { SendRefusedError } from "../core/errors.js"
+import { ConfigError, SendRefusedError } from "../core/errors.js"
 import { poll } from "../core/poll.js"
 import {
   DEFAULT_SEND_GUARD_COPY,
@@ -31,6 +31,13 @@ import type {
 // status and the Graph error code but NEVER the access token or the client
 // secret.
 //
+// Every request, the token request included, is bounded as a whole: from
+// the connection to the last byte of the body it gets requestTimeoutMs
+// (30 s by default), and inside waitFor never more than the wait has left.
+// A request that runs out is aborted and ends in a GraphRequestTimeoutError.
+// Nothing is retried except waitFor's reads; a send that got no answer is
+// reported as possibly sent (mayHaveSent), never sent again.
+//
 // The QA mailbox may also be the staging sandbox sink (where every
 // redirected staging mail lands), so waitFor reads as little of it as it
 // can: the list asks Graph for the run's own subject (a record number or
@@ -42,6 +49,14 @@ import type {
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 const TOKEN_SKEW_MS = 60_000
 const TOKEN_OPERATION = "token request"
+/** The bound of one request when the project sets none. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+/** setTimeout's longest delay. */
+const MAX_TIMER_MS = 2_147_483_647
+const SEND_HINT =
+  ". The mail may have been sent; it is not retried, because a second send could mail twice."
+const NO_ANSWER_HINT =
+  "No answer is a network or timeout problem, not a credentials one: check the network path (proxy, firewall, DNS) from this machine to login.microsoftonline.com and graph.microsoft.com."
 // Throttling / gateway blips on the waitFor list READ are re-polled. Sends and
 // replies are never retried (a retry can mail twice); auth, permission and
 // token errors are real failures, so they stay fatal too.
@@ -64,6 +79,11 @@ const MESSAGE_FIELDS = [
 const TEXT_BODY = { Prefer: 'outlook.body-content-type="text"' }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
+
+/** A timer handle (Node's, or a test's). */
+interface TimerHandle {
+  unref?(): unknown
+}
 
 /** The wording of the driver's refusals and hints that a project may tailor. */
 export interface GraphDriverCopy {
@@ -99,11 +119,22 @@ export interface GraphMailDriverOptions {
   replyDomain: string
   /** Default per-hop wait. */
   defaultTimeoutMs: number
+  /**
+   * The longest one request may take, from the connection to the last byte
+   * of the body, the token request included. Default 30 000 ms. A whole
+   * number of milliseconds from 1 to 2 147 483 647; anything else is a
+   * ConfigError. Inside waitFor a request also never outlives the wait.
+   */
+  requestTimeoutMs?: number
   /** Override any of the refusal and hint wording. */
   copy?: Partial<GraphDriverCopy>
   fetch?: FetchLike
   now?: () => number
   sleep?: (ms: number) => Promise<void>
+  /** Arms a request's bound. Default: setTimeout, unref'd. For tests. */
+  setTimeout?: (fn: () => void, ms: number) => TimerHandle
+  /** Default: clearTimeout. */
+  clearTimeout?: (timer: TimerHandle) => void
 }
 
 interface GraphRecipient {
@@ -135,6 +166,65 @@ export class GraphHttpError extends Error {
     super(message)
     this.name = "GraphHttpError"
   }
+}
+
+/**
+ * A Graph or token request that got no answer within its bound
+ * (requestTimeoutMs, or what a waitFor had left); the driver aborted it.
+ * The message is already redacted and names the operation, never the
+ * request. It carries no `cause`, and it is never a GraphHttpError or a
+ * core TimeoutError. `mayHaveSent` is true only for a request that sends
+ * mail (sendMail, a reply draft's send): Graph may have accepted it before
+ * the answer was lost, and the driver never sends it again.
+ */
+export class GraphRequestTimeoutError extends Error {
+  constructor(
+    message: string,
+    readonly operation: string,
+    /** The bound the request had, in milliseconds. */
+    readonly timeoutMs: number,
+    readonly mayHaveSent: boolean,
+  ) {
+    super(message)
+    this.name = "GraphRequestTimeoutError"
+  }
+}
+
+/** One request's answer, its body read in full within the bound. */
+interface GraphReply {
+  status: number
+  ok: boolean
+  headers: Headers
+  text: string
+}
+
+/** What a Graph request sends and how it is bounded. */
+interface GraphRequest {
+  json?: unknown
+  headers?: Record<string, string>
+  /** A wait's deadline (in now() time): the request never outlives it. */
+  deadline?: number
+  /** The request sends mail: a timeout may have sent it. */
+  sends?: boolean
+}
+
+/** "30 s" for whole seconds, else "300 ms". */
+function formatBound(ms: number): string {
+  return ms % 1000 === 0 ? `${ms / 1000} s` : `${ms} ms`
+}
+
+/**
+ * A transport error's own message plus, when its cause has one, the
+ * system error code (ECONNREFUSED, ENOTFOUND): nothing else of the cause,
+ * which may echo the request.
+ */
+function describeTransportError(error: unknown): string {
+  const message =
+    (error as { message?: unknown } | null)?.message ?? String(error)
+  const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code
+  return typeof code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(code)
+    ? `${String(message)} (${code})`
+    : String(message)
 }
 
 function parseRetryAfter(
@@ -243,6 +333,9 @@ export class GraphMailDriver implements MailDriver {
   private readonly fetchImpl: FetchLike
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
+  private readonly requestTimeoutMs: number
+  private readonly setTimer: (fn: () => void, ms: number) => TimerHandle
+  private readonly clearTimer: (timer: TimerHandle) => void
   private token: { value: string; expiresAt: number } | null = null
   private pendingToken: Promise<string> | null = null
   private savedCount = 0
@@ -250,7 +343,28 @@ export class GraphMailDriver implements MailDriver {
   private subjectFilter = true
   private readonly copy: GraphDriverCopy
 
+  /**
+   * Throws a ConfigError when requestTimeoutMs is not a whole number of
+   * milliseconds from 1 to 2 147 483 647 (the message names the option,
+   * never its value). Makes no request.
+   */
   constructor(private readonly options: GraphMailDriverOptions) {
+    const requestTimeoutMs =
+      options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+    if (
+      !Number.isInteger(requestTimeoutMs) ||
+      requestTimeoutMs < 1 ||
+      requestTimeoutMs > MAX_TIMER_MS
+    ) {
+      throw new ConfigError(
+        `GraphMailDriver option requestTimeoutMs must be a whole number of milliseconds from 1 to ${MAX_TIMER_MS}.`,
+      )
+    }
+    this.requestTimeoutMs = requestTimeoutMs
+    this.setTimer = options.setTimeout ?? ((fn, ms) => setTimeout(fn, ms))
+    this.clearTimer =
+      options.clearTimeout ??
+      ((timer) => clearTimeout(timer as ReturnType<typeof setTimeout>))
     this.copy = { ...DEFAULT_GRAPH_DRIVER_COPY, ...options.copy }
     this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init))
     this.now = options.now ?? (() => Date.now())
@@ -258,6 +372,11 @@ export class GraphMailDriver implements MailDriver {
       options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
   }
 
+  /**
+   * Requests a token and reads one message id. A failure names the mailbox
+   * and adds what to check: the credentials and mailbox scope
+   * (copy.healthHint), or, when a request got no answer, the network path.
+   */
   async health(): Promise<void> {
     try {
       // Only an id: proves read access without reading anyone's mail.
@@ -266,8 +385,13 @@ export class GraphMailDriver implements MailDriver {
         `${this.mailboxPath()}/messages?$top=1&$select=id`,
       )
     } catch (error) {
+      // A request that got no answer says nothing about the credentials.
+      const hint =
+        error instanceof GraphRequestTimeoutError
+          ? NO_ANSWER_HINT
+          : this.copy.healthHint
       throw new Error(
-        `Graph mailbox health check failed for ${this.options.mailbox}: ${(error as Error).message}. ${this.copy.healthHint}`,
+        `Graph mailbox health check failed for ${this.options.mailbox}: ${(error as Error).message}. ${hint}`,
         { cause: error },
       )
     }
@@ -279,6 +403,9 @@ export class GraphMailDriver implements MailDriver {
    * SendFromAliasEnabled. Graph's sendMail is 202-with-no-body and forbids
    * setting Message-ID, so callers correlate by subject / run id and the
    * result's messageId is "".
+   *
+   * Never retried. A sendMail that got no answer throws a
+   * GraphRequestTimeoutError with mayHaveSent: Graph may have sent it.
    */
   async send(mail: OutgoingMail): Promise<SendResult> {
     const to = assertReplyDomainRecipient(
@@ -294,13 +421,16 @@ export class GraphMailDriver implements MailDriver {
       )
     }
     await this.graph("POST", `${this.mailboxPath()}/sendMail`, {
-      message: {
-        subject: mail.subject,
-        body: { contentType: "Text", content: mail.text },
-        ...this.fromField(mail.from),
-        toRecipients: [{ emailAddress: { address: to } }],
+      json: {
+        message: {
+          subject: mail.subject,
+          body: { contentType: "Text", content: mail.text },
+          ...this.fromField(mail.from),
+          toRecipients: [{ emailAddress: { address: to } }],
+        },
+        saveToSentItems: false,
       },
-      saveToSentItems: false,
+      sends: true,
     })
     return { messageId: "" }
   }
@@ -310,6 +440,12 @@ export class GraphMailDriver implements MailDriver {
    * which must name a subject (data minimisation, see the header): Graph is
    * asked for that subject server-side, and a message's body, recipients and
    * headers are read only once its subject matched.
+   *
+   * Each request gets at most what the wait has left (at least 1 ms). The
+   * first attempt always runs; after it, no request is issued once nothing
+   * is left, and the last state observed is reported. A read (the token request included) that got
+   * no answer, a throttle (429) or a gateway blip (503, 504) is re-polled;
+   * any other failure, a connection error included, ends the wait at once.
    */
   async waitFor(query: MailQuery): Promise<MailMessage> {
     const subject = query.subjectIncludes
@@ -326,10 +462,22 @@ export class GraphMailDriver implements MailDriver {
     const deadline = this.now() + timeoutMs
     // A message's content does not change: fetch each candidate once.
     const fetched = new Map<string, MailMessage>()
+    let lastObserved: string | undefined
+    const observe = (observed: string) => {
+      lastObserved = observed
+      return { observed }
+    }
     return poll<MailMessage>(
       async () => {
+        // Out of time (poll's back-off ends on the deadline): report the last
+        // state rather than start a request the wait could not see finish.
+        if (lastObserved !== undefined && deadline - this.now() <= 0) {
+          return { observed: lastObserved }
+        }
         try {
-          const candidates = (await this.listSince(guarded.since, subject))
+          const candidates = (
+            await this.listSince(guarded.since, subject, deadline)
+          )
             .filter((m) => (m.subject ?? "").includes(subject))
             .filter((m) => !guarded.excludeIds?.includes(m.id))
             .filter(
@@ -343,8 +491,7 @@ export class GraphMailDriver implements MailDriver {
                 (await this.graph(
                   "GET",
                   `${this.mailboxPath()}/messages/${encodeURIComponent(candidate.id)}?$select=${MESSAGE_FIELDS}`,
-                  undefined,
-                  TEXT_BODY,
+                  { headers: TEXT_BODY, deadline },
                 )) as GraphMessage,
               )
               fetched.set(candidate.id, message)
@@ -355,20 +502,25 @@ export class GraphMailDriver implements MailDriver {
           }
           // Counts only: the candidates are this run's own mail, but nothing
           // about any message reaches the TimeoutError (and so summary.md).
-          return {
-            observed:
-              candidates.length === 0
-                ? `no message with ${JSON.stringify(subject)} in the subject since the query start`
-                : `${candidates.length} message(s) with ${JSON.stringify(subject)} in the subject since the query start, none matching`,
-          }
+          return observe(
+            candidates.length === 0
+              ? `no message with ${JSON.stringify(subject)} in the subject since the query start`
+              : `${candidates.length} message(s) with ${JSON.stringify(subject)} in the subject since the query start, none matching`,
+          )
         } catch (error) {
+          if (error instanceof GraphRequestTimeoutError) {
+            // Count-only like the rest: the operation names a message id.
+            return observe(
+              `Graph request got no answer within ${formatBound(error.timeoutMs)}, retrying`,
+            )
+          }
           if (!this.isTransientRead(error)) throw error
           const wait = Math.min(
             error.retryAfterMs ?? 0,
             Math.max(0, deadline - this.now()),
           )
           if (wait > 0) await this.sleep(wait)
-          return { observed: `Graph HTTP ${error.status}, retrying` }
+          return observe(`Graph HTTP ${error.status}, retrying`)
         }
       },
       {
@@ -390,6 +542,7 @@ export class GraphMailDriver implements MailDriver {
   private async listSince(
     since: Date,
     subject: string,
+    deadline: number,
   ): Promise<GraphMessage[]> {
     let filter = `receivedDateTime ge ${graphInstant(since)}`
     if (this.subjectFilter) {
@@ -401,7 +554,7 @@ export class GraphMailDriver implements MailDriver {
       `&$orderby=${encodeURIComponent("receivedDateTime desc")}` +
       `&$top=50&$select=${LIST_FIELDS}`
     try {
-      const body = (await this.graph("GET", path)) as {
+      const body = (await this.graph("GET", path, { deadline })) as {
         value?: GraphMessage[]
       } | null
       return body?.value ?? []
@@ -415,7 +568,7 @@ export class GraphMailDriver implements MailDriver {
         throw error
       }
       this.subjectFilter = false
-      return this.listSince(since, subject)
+      return this.listSince(since, subject, deadline)
     }
   }
 
@@ -425,6 +578,10 @@ export class GraphMailDriver implements MailDriver {
    * on createReply. The recipient (Reply-To, else From) passes the guard
    * before the draft exists: an app mail without Reply-To would otherwise
    * be answered at its From, the real support address.
+   *
+   * Never retried. A send step that got no answer throws a
+   * GraphRequestTimeoutError with mayHaveSent; a createReply or PATCH that
+   * got none leaves at most an unsent draft in the mailbox.
    */
   async reply(original: MailMessage, mail: ReplyMail): Promise<SendResult> {
     const to = assertReplyDomainRecipient(
@@ -441,13 +598,15 @@ export class GraphMailDriver implements MailDriver {
     // Cc/Bcc cleared explicitly: the single guarded recipient must not depend
     // on what Exchange put on the draft.
     const patched = (await this.graph("PATCH", draftPath, {
-      toRecipients: [{ emailAddress: { address: to } }],
-      ccRecipients: [],
-      bccRecipients: [],
-      ...this.fromField(mail.from),
-      body: { contentType: "Text", content: mail.text },
+      json: {
+        toRecipients: [{ emailAddress: { address: to } }],
+        ccRecipients: [],
+        bccRecipients: [],
+        ...this.fromField(mail.from),
+        body: { contentType: "Text", content: mail.text },
+      },
     })) as Partial<GraphMessage> | null
-    await this.graph("POST", `${draftPath}/send`)
+    await this.graph("POST", `${draftPath}/send`, { sends: true })
     return { messageId: patched?.internetMessageId ?? "" }
   }
 
@@ -483,40 +642,59 @@ export class GraphMailDriver implements MailDriver {
     return `/users/${encodeURIComponent(this.options.mailbox)}`
   }
 
-  /** Client-credentials token, cached until 60 s before expiry. */
-  private async accessToken(): Promise<string> {
+  /**
+   * Client-credentials token, cached until 60 s before expiry. One token
+   * request at a time, shared by every caller and always bounded by the
+   * full requestTimeoutMs. A caller with a nearer `deadline` stops waiting
+   * for it then (a GraphRequestTimeoutError) without cutting it short for
+   * the others.
+   */
+  private async accessToken(deadline?: number): Promise<string> {
     if (this.token && this.now() < this.token.expiresAt - TOKEN_SKEW_MS) {
       return this.token.value
     }
-    this.pendingToken ??= this.fetchToken().finally(() => {
-      this.pendingToken = null
-    })
-    return this.pendingToken
+    if (!this.pendingToken) {
+      const pending = this.fetchToken().finally(() => {
+        this.pendingToken = null
+      })
+      // A caller that stopped waiting leaves it unawaited: its failure must
+      // not surface as an unhandled rejection.
+      pending.catch(() => {})
+      this.pendingToken = pending
+    }
+    const ms = this.boundMs(deadline)
+    if (ms >= this.requestTimeoutMs) return this.pendingToken
+    return this.within(this.pendingToken, TOKEN_OPERATION, ms)
   }
 
   private async fetchToken(): Promise<string> {
     const { tenantId, clientId, clientSecret } = this.options
     const url = `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`
     const requestedAt = this.now()
-    const response = await this.call(TOKEN_OPERATION, url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        scope: "https://graph.microsoft.com/.default",
-        grant_type: "client_credentials",
-      }).toString(),
-    })
-    let body: { access_token?: string; expires_in?: number }
+    const reply = await this.call(
+      TOKEN_OPERATION,
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          scope: "https://graph.microsoft.com/.default",
+          grant_type: "client_credentials",
+        }).toString(),
+      },
+      this.requestTimeoutMs,
+    )
+    let body: { access_token?: string; expires_in?: number } | null
     try {
-      body = (await response.json()) as typeof body
+      body = JSON.parse(reply.text) as typeof body
     } catch {
       throw new Error(
-        `Graph token request returned a non-JSON ${response.status} body (${response.headers.get("content-type") ?? "unknown type"})`,
+        `Graph token request returned a non-JSON ${reply.status} body (${reply.headers.get("content-type") ?? "unknown type"})`,
       )
     }
-    if (!body.access_token) {
+    if (!body?.access_token) {
       throw new Error("Graph token request failed: no access_token returned")
     }
     this.token = {
@@ -529,32 +707,37 @@ export class GraphMailDriver implements MailDriver {
   private async graph(
     method: string,
     path: string,
-    json?: unknown,
-    extraHeaders: Record<string, string> = {},
+    request: GraphRequest = {},
   ): Promise<unknown> {
-    const token = await this.accessToken()
+    const token = await this.accessToken(request.deadline)
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
-      ...extraHeaders,
+      ...request.headers,
     }
-    if (json !== undefined) headers["Content-Type"] = "application/json"
+    if (request.json !== undefined) headers["Content-Type"] = "application/json"
     const operation = `${method} ${path.split("?")[0]}`
-    const response = await this.call(operation, `${GRAPH_BASE}${path}`, {
-      method,
-      headers,
-      body: json === undefined ? undefined : JSON.stringify(json),
-    })
-    const text = await response.text()
-    if (text === "") return null
+    const reply = await this.call(
+      operation,
+      `${GRAPH_BASE}${path}`,
+      {
+        method,
+        headers,
+        body:
+          request.json === undefined ? undefined : JSON.stringify(request.json),
+      },
+      this.boundMs(request.deadline),
+      request.sends,
+    )
+    if (reply.text === "") return null
     try {
-      return JSON.parse(text) as unknown
+      return JSON.parse(reply.text) as unknown
     } catch {
       // A proxy/login interstitial or HTML error page: name the call, never
       // echo the body.
-      const type = response.headers.get("content-type") ?? "unknown type"
+      const type = reply.headers.get("content-type") ?? "unknown type"
       throw new Error(
         this.redact(
-          `Graph ${operation} returned a non-JSON ${response.status} body (${type})`,
+          `Graph ${operation} returned a non-JSON ${reply.status} body (${type})`,
         ),
       )
     }
@@ -562,65 +745,179 @@ export class GraphMailDriver implements MailDriver {
 
   private async graphText(path: string): Promise<string> {
     const token = await this.accessToken()
-    const response = await this.call(`GET ${path}`, `${GRAPH_BASE}${path}`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    return response.text()
+    const reply = await this.call(
+      `GET ${path}`,
+      `${GRAPH_BASE}${path}`,
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+      this.requestTimeoutMs,
+    )
+    return reply.text
   }
 
-  /** fetch + non-2xx mapping; every message passes through redact(). */
+  /** requestTimeoutMs, or less when a wait's deadline is nearer (at least 1 ms). */
+  private boundMs(deadline: number | undefined): number {
+    if (deadline === undefined) return this.requestTimeoutMs
+    return Math.max(
+      1,
+      Math.min(this.requestTimeoutMs, Math.ceil(deadline - this.now())),
+    )
+  }
+
+  /**
+   * Arms a timer that never keeps the process alive on its own. A real
+   * fetch holds a socket until the bound fires; a mocked or custom fetch
+   * that holds no handle may let the process exit before it does.
+   */
+  private arm(fn: () => void, ms: number): TimerHandle {
+    const timer = this.setTimer(fn, ms)
+    timer.unref?.()
+    return timer
+  }
+
+  private timeoutError(
+    operation: string,
+    ms: number,
+    sends: boolean,
+  ): GraphRequestTimeoutError {
+    return new GraphRequestTimeoutError(
+      this.redact(
+        `Graph ${operation} got no answer within ${formatBound(ms)}${sends ? SEND_HINT : ""}`,
+      ),
+      operation,
+      ms,
+      sends,
+    )
+  }
+
+  /** Waits at most `ms` for a shared request, never cancelling it. */
+  private async within<T>(
+    shared: Promise<T>,
+    operation: string,
+    ms: number,
+  ): Promise<T> {
+    const timeout = this.timeoutError(operation, ms, false)
+    let timer: TimerHandle | undefined
+    const expired = new Promise<never>((_, reject) => {
+      timer = this.arm(() => reject(timeout), ms)
+    })
+    try {
+      return await Promise.race([shared, expired])
+    } finally {
+      this.clearTimer(timer!)
+    }
+  }
+
+  /**
+   * One request, bounded as a whole: the fetch, the headers and the whole
+   * body end within `ms`, or the request is aborted and a
+   * GraphRequestTimeoutError thrown. Non-2xx becomes a GraphHttpError.
+   * Every message passes through redact().
+   */
   private async call(
     operation: string,
     url: string,
     init: RequestInit,
-  ): Promise<Response> {
-    let response: Response
+    ms: number,
+    sends = false,
+  ): Promise<GraphReply> {
+    const timeout = this.timeoutError(operation, ms, sends)
+    const controller = new AbortController()
+    let expire!: (reason: GraphRequestTimeoutError) => void
+    // Raced against the fetch and the body read, so a fetch that ignores its
+    // signal, or a body that never ends, still ends at the bound.
+    const expired = new Promise<never>((_, reject) => {
+      expire = reject
+    })
+    expired.catch(() => {})
+    // A plain AbortController and timer on purpose, not AbortSignal.timeout
+    // or AbortSignal.any: on Node 20 their signals can be garbage-collected
+    // mid-request and never fire (nodejs/node#57736).
+    const timer = this.arm(() => {
+      // Rejected first, so the race settles with the driver's own error.
+      expire(timeout)
+      controller.abort(timeout)
+    }, ms)
     try {
-      response = await this.fetchImpl(url, init)
-    } catch (error) {
-      // No `cause`: a transport error's message/stack may echo the request
-      // (Authorization header); only the redacted text may leave this method.
-      // eslint-disable-next-line preserve-caught-error
-      throw new Error(
+      let reply: GraphReply
+      try {
+        const response = await Promise.race([
+          this.fetchImpl(url, { ...init, signal: controller.signal }),
+          expired,
+        ])
+        const text = await Promise.race([response.text(), expired]).catch(
+          (error: unknown) => {
+            // A failed reply whose body cannot be read is reported by its
+            // status alone; a 2xx whose body cannot be read is a failure.
+            if (response.ok || controller.signal.reason === timeout) {
+              throw error
+            }
+            return ""
+          },
+        )
+        reply = {
+          status: response.status,
+          ok: response.ok,
+          headers: response.headers,
+          text,
+        }
+      } catch (error) {
+        // Identity, never the error's name: only the driver's own bound is a
+        // timeout; any other AbortError is a transport error.
+        if (error === timeout || controller.signal.reason === timeout) {
+          throw timeout
+        }
+        // No `cause`: a transport error's message/stack may echo the request
+        // (Authorization header); only the redacted text may leave this
+        // method, plus the cause's system error code.
+        // eslint-disable-next-line preserve-caught-error
+        throw new Error(
+          this.redact(
+            `Graph ${operation} failed: ${describeTransportError(error)}`,
+          ),
+        )
+      }
+      if (reply.ok) return reply
+      const detail = errorDetail(reply.text)
+      throw new GraphHttpError(
         this.redact(
-          `Graph ${operation} failed: ${(error as Error).message ?? error}`,
+          `Graph ${operation} failed: HTTP ${reply.status}${detail ? ` ${detail}` : ""}`,
         ),
+        operation,
+        reply.status,
+        parseRetryAfter(reply.headers.get("retry-after"), this.now()),
       )
+    } finally {
+      this.clearTimer(timer)
     }
-    if (response.ok) return response
-
-    const detail = await errorDetail(response)
-    throw new GraphHttpError(
-      this.redact(
-        `Graph ${operation} failed: HTTP ${response.status}${detail ? ` ${detail}` : ""}`,
-      ),
-      operation,
-      response.status,
-      parseRetryAfter(response.headers.get("retry-after"), this.now()),
-    )
   }
 
+  /**
+   * Removes the access token and the client secret from `message`, as typed
+   * and in both encoded forms an echoed request can carry: URI-encoded and
+   * form-encoded (the token request's body, where a space is "+" and "~" is
+   * "%7E").
+   */
   private redact(message: string): string {
     let out = message.replace(
       /Bearer\s+[A-Za-z0-9._~+/=-]+/g,
       "Bearer [redacted]",
     )
     for (const secret of [this.token?.value, this.options.clientSecret]) {
-      if (secret) out = out.split(secret).join("[redacted]")
+      if (!secret) continue
+      for (const form of [
+        secret,
+        encodeURIComponent(secret),
+        new URLSearchParams({ s: secret }).toString().slice(2),
+      ]) {
+        out = out.split(form).join("[redacted]")
+      }
     }
     return out
   }
 }
 
 /** Graph `{error:{code,message}}` or AAD `{error, error_description}`. */
-async function errorDetail(response: Response): Promise<string> {
-  let text: string
-  try {
-    text = await response.text()
-  } catch {
-    return ""
-  }
+function errorDetail(text: string): string {
   try {
     const body = JSON.parse(text) as {
       error?: string | { code?: string; message?: string }

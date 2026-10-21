@@ -17,7 +17,9 @@ import {
 } from "../src/mail-graph/index.js"
 
 const TOKEN = "eyJ.fake-access-token.sig"
-const SECRET = "client-secret-value"
+// A client secret with the characters that encoding changes (~ + / = and a
+// space), so a check for it also covers its encoded forms.
+const SECRET = "Abc8Q~x+y/z= END"
 const MAILBOX = "qa@example.com"
 const BASE = "https://graph.microsoft.com/v1.0/users/qa%40example.com"
 const TOKEN_URL = "https://login.microsoftonline.com/tenant-1/oauth2/v2.0/token"
@@ -62,6 +64,25 @@ function fakeFetch(respond: Responder = () => undefined, expiresIn = 3600) {
   return { fetch, calls }
 }
 
+interface Bound {
+  ms: number
+  unrefd: boolean
+  unref(): Bound
+}
+
+// The request bounds (requestTimeoutMs) the driver arms through its timer
+// seam. These fakes always answer, so a bound never fires here; afterEach
+// checks that every one was unref'd and cleared once its call settled.
+const armed = new Set<Bound>()
+const bounds: Bound[] = []
+
+test.afterEach(() => {
+  expect([...armed].map((b) => b.ms)).toEqual([])
+  expect(bounds.filter((b) => !b.unrefd).map((b) => b.ms)).toEqual([])
+  armed.clear()
+  bounds.length = 0
+})
+
 function clock(start = Date.parse("2026-10-13T10:00:00.000Z")) {
   let t = start
   return {
@@ -72,6 +93,22 @@ function clock(start = Date.parse("2026-10-13T10:00:00.000Z")) {
     sleep: (ms: number) => {
       t += ms
       return Promise.resolve()
+    },
+    setTimeout: (_fn: () => void, ms: number): Bound => {
+      const bound: Bound = {
+        ms,
+        unrefd: false,
+        unref() {
+          this.unrefd = true
+          return this
+        },
+      }
+      armed.add(bound)
+      bounds.push(bound)
+      return bound
+    },
+    clearTimeout: (bound: unknown) => {
+      armed.delete(bound as Bound)
     },
   }
 }
@@ -91,6 +128,8 @@ function driver(
     fetch,
     now: c.now,
     sleep: c.sleep,
+    setTimeout: c.setTimeout,
+    clearTimeout: c.clearTimeout,
   })
 }
 

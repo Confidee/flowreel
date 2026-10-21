@@ -188,6 +188,11 @@ Building blocks for writing a driver:
   `replyDomainTarget(supportAddress, replyDomain)` from `/mail`: the
   staging send guard. Call it before any network request. See
   [Safety](safety.md#mail).
+- **Bound every request yourself.** `poll()` cannot interrupt an attempt
+  that never returns, so a request with no bound of its own (connection,
+  headers and the whole body) stalls the run past the wait's `timeoutMs`.
+  Give each request an `AbortController` and a timer, and race the body
+  read against it too.
 
 Drivers:
 
@@ -678,16 +683,17 @@ flowreel reads no variables for the driver: your project's config reads
 the tenant id, client id, client secret, mailbox and reply domain (see
 [Configuration: secrets](configuration.md#secrets)) and passes them in.
 
-| Option                  | What it is                                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `tenantId`              | the directory (tenant) id                                                                                          |
-| `clientId`              | the app registration's application (client) id                                                                     |
-| `clientSecret`          | a client secret of the app. The only credential type in 0.x: no certificate                                        |
-| `mailbox`               | the QA mailbox: the requester the flows send as, and where the app's staging mail to the personas lands            |
-| `replyDomain`           | the only domain a send or reply may address (the staging reply domain)                                             |
-| `defaultTimeoutMs`      | the per-hop wait                                                                                                   |
-| `copy`                  | optional wording: `guard` (the send guard's `SendGuardCopy`), `healthHint` (your setting names), `subjectRequired` |
-| `fetch`, `now`, `sleep` | for unit tests                                                                                                     |
+| Option                                                | What it is                                                                                                                                                                                                            |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tenantId`                                            | the directory (tenant) id                                                                                                                                                                                             |
+| `clientId`                                            | the app registration's application (client) id                                                                                                                                                                        |
+| `clientSecret`                                        | a client secret of the app. The only credential type in 0.x: no certificate                                                                                                                                           |
+| `mailbox`                                             | the QA mailbox: the requester the flows send as, and where the app's staging mail to the personas lands                                                                                                               |
+| `replyDomain`                                         | the only domain a send or reply may address (the staging reply domain)                                                                                                                                                |
+| `defaultTimeoutMs`                                    | the per-hop wait                                                                                                                                                                                                      |
+| `requestTimeoutMs`                                    | optional: the longest one request may take, from the connection to the last byte of the body, the token request included. Default `30_000`. A whole number of milliseconds from 1 to 2147483647, else a `ConfigError` |
+| `copy`                                                | optional wording: `guard` (the send guard's `SendGuardCopy`), `healthHint` (your setting names), `subjectRequired`                                                                                                    |
+| `fetch`, `now`, `sleep`, `setTimeout`, `clearTimeout` | for unit tests. The bound's timer is unref'd: a real `fetch` holds a socket until it fires, but a mocked or custom `fetch` that holds no handle may let the process exit first                                        |
 
 What it does:
 
@@ -702,9 +708,38 @@ What it does:
 - **The send guard runs first**: every send and every reply recipient
   (Reply-To, else From) passes `assertReplyDomainRecipient` before any
   request, so a run can never mail a real mailbox.
-- **Never retried**: a send or a reply. Only a `429`, `503` or `504` on the
-  poll's list read is re-polled (honouring Retry-After); auth, permission
-  and token errors stay fatal.
+- **Never retried**: a send or a reply. Only `waitFor`'s reads are
+  re-polled: a `429`, `503` or `504` on the list (honouring Retry-After),
+  and a read, the token request included, that got no answer. Any other
+  failure ends the wait at once: auth, permission and token errors, and a
+  connection error such as `ECONNREFUSED` (a read that could not connect
+  is not a read that is slow).
+- **Every request is bounded**: each Graph and token request, from the
+  connection to the last byte of the body, gets `requestTimeoutMs` (30 s
+  by default). Inside `waitFor` a request gets no more than the wait has
+  left (at least 1 ms), and after the first attempt none starts once
+  nothing is left, so a wait always ends at its own `timeoutMs`. A request that runs out is aborted and throws
+  `GraphRequestTimeoutError` (`operation`, `timeoutMs`, `mayHaveSent`):
+  `Graph <operation> got no answer within 30 s`. 30 s is deliberately
+  stricter than the defaults around it: Microsoft's .NET Graph SDK and its
+  Go client wait 100 s (its JavaScript SDK sets no request timeout), and
+  Node's built-in `fetch` waits 300 s for the headers and 300 s between
+  two pieces of the body, so a body that trickles in never ends.
+  <!-- Sources: msgraph-sdk-dotnet-core GraphClientFactory.cs
+  (`defaultTimeout = TimeSpan.FromSeconds(100)`), kiota-http-go
+  kiota_client_factory.go (`Timeout: time.Second * 100`), checked
+  2026-10-21; undici 7 lib/dispatcher/client.js headersTimeout and
+  bodyTimeout defaults (300 000 ms). -->
+- **A send that got no answer may have been sent**: a `sendMail` or a
+  reply's `send` that times out has `mayHaveSent: true` and says so,
+  because Graph may have accepted it before the answer was lost. It is
+  not retried. A `createReply` or PATCH that times out sent nothing, but
+  can leave an unsent draft in the QA mailbox's Drafts folder.
+- **One token request at a time**: callers share it, and it always gets
+  the full `requestTimeoutMs`. A wait with less time left stops waiting
+  for it without cutting it short for the others, so the request can keep
+  the process alive for at most `requestTimeoutMs` after that wait ended.
+  One that timed out is dropped, and the next call asks for a new token.
 - **Reads as little as it can**: `waitFor` requires `subjectIncludes`. The
   list asks Graph for that subject server-side and selects only id,
   subject and time; if Graph refuses the `contains()` filter (a `400`), the
@@ -717,9 +752,11 @@ What it does:
   the resolved `qa@`.
 - **No secret in an error**: errors carry the HTTP status and Graph's error
   code; the access token and the client secret are redacted, and a
-  transport error is re-thrown without its cause.
-- **`health()`** reads one message id; **`saveEml()`** saves the raw MIME
-  (`$value`) under the results folder.
+  transport error is re-thrown without its cause, keeping only the cause's
+  system error code (`fetch failed (ECONNREFUSED)`).
+- **`health()`** reads one message id. When a request got no answer, its
+  message points at the network path instead of the credentials.
+  **`saveEml()`** saves the raw MIME (`$value`) under the results folder.
 
 The tenant setup below is independent of the driver code. A tenant
 administrator does it once.

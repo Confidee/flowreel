@@ -111,6 +111,25 @@ the inbound mail (look for a dropped or quarantined message in its admin
 view)? Is a rate limit parking new records from this sender? Are the
 background workers running? Never re-send by hand within the same run.
 
+**`GraphRequestTimeoutError: Graph <operation> got no answer within 30 s`**
+Microsoft Graph, or its sign-in endpoint for `token request`, did not
+answer within `requestTimeoutMs`, so the driver aborted the request. This
+says nothing about the credentials (a failed `health()` says so too).
+Check the network path from the machine that runs flowreel to
+`login.microsoftonline.com` and `graph.microsoft.com` (proxy, firewall,
+DNS, VPN) and Microsoft 365's service health. Inside a `waitFor`, such a
+read is re-polled until the wait's own timeout, which then reports
+`Last observed: Graph request got no answer within …, retrying`. Raise
+`requestTimeoutMs` only when answers are slow rather than missing.
+
+**`… got no answer within 30 s. The mail may have been sent; it is not retried, because a second send could mail twice.`**
+A `sendMail` or a reply's `send` got no answer, and Graph may have sent
+the mail anyway (`mayHaveSent: true`). Before you run the flow again,
+search the app for the run id or for the record the mail was meant to
+create or update: if it is there, the mail arrived. Never re-send it by
+hand. A `createReply` or PATCH that got no answer sent nothing, but may
+have left an unsent draft in the QA mailbox's Drafts folder: delete it.
+
 **`InboundBudgetError: Refusing inbound mail "…": this staging tour already sent 3 of at most 3 …`**
 The tour's per-run budget refused the send before it happened. Create the
 record through the app's API instead, or make the feature development-only.
