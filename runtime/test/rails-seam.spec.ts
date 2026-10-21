@@ -608,6 +608,7 @@ test.describe("seamHttpFromRequest", () => {
       method?: string
       data?: unknown
       headers?: Record<string, string>
+      timeout?: number
     }
     const seen: ({ path: string } & Init)[] = []
     let text = '{"cursor":0}'
@@ -631,20 +632,24 @@ test.describe("seamHttpFromRequest", () => {
     })
     await http("POST", "/test/perform_enqueued_jobs")
     const json = { "Content-Type": "application/json" }
+    // #20: every call also carries Playwright's per-call timeout (30 s default).
+    const timeout = 30_000
     expect(seen).toEqual([
       {
         path: "/test/inbound_emails",
         method: "POST",
         data: { mode: "raw" },
         headers: json,
+        timeout,
       },
-      { path: "/test/mail_deliveries", method: "GET" },
+      { path: "/test/mail_deliveries", method: "GET", timeout },
       // A POST with no fields still sends a JSON body (the kit's gate).
       {
         path: "/test/perform_enqueued_jobs",
         method: "POST",
         data: {},
         headers: json,
+        timeout,
       },
     ])
   })

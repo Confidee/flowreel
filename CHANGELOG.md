@@ -6,6 +6,20 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Security
+
+- **`GraphMailDriver` no longer follows redirects (#22).** Affects 0.3.0
+  and earlier. The driver's requests used `fetch`'s default
+  `redirect: "follow"`, and the fetch standard keeps the body on a 307 or
+  308: a 307 on `sendMail` sent the mail a second time (and reported the
+  send as successful), a redirect loop sent it up to 21 times, and a 307
+  on the token request re-sent the form body, `client_secret` included,
+  to the redirect target. Every Graph and token request now uses
+  `redirect: "manual"`: a 3xx is a `GraphHttpError` that sent nothing
+  (`mayHaveSent: false`), never followed and never retried. A project
+  that passes its own `fetch` must make one attempt per call and never
+  follow redirects.
+
 ### Added
 
 - `requestTimeoutMs` for `GraphMailDriver` (`@confidee/flowreel/mail-graph`):
@@ -14,9 +28,73 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   more than the wait has left. A whole number of milliseconds from 1 to
   2147483647; anything else is a `ConfigError`.
 - `GraphRequestTimeoutError` from `@confidee/flowreel/mail-graph`
-  (`operation`, `timeoutMs`, `mayHaveSent`): what a request that got no
-  answer throws. A `sendMail` or a reply's `send` sets `mayHaveSent` and
-  says the mail may have been sent; it is never retried.
+  (`timeoutMs`, plus `operation`, `mayHaveSent` and `clientRequestId` from
+  `GraphRequestError`): what a request that got no answer throws. A
+  `sendMail` or a reply's `send` sets `mayHaveSent`, says the mail may have
+  been sent and names its `client-request-id`; it is never retried.
+- `GraphRequestError` from `@confidee/flowreel/mail-graph`: the base of
+  every error a Graph or token request ends in (`operation`,
+  `mayHaveSent`, always a boolean, and `clientRequestId`), with a
+  one-line message. A bad 2xx answer (a body that is not JSON, a token
+  answer without `access_token`) throws it as is, with `mayHaveSent`
+  false. `GraphHttpError`, `GraphRequestTimeoutError` and the new
+  `GraphTransportError` extend it (#17).
+- `GraphTransportError` from `@confidee/flowreel/mail-graph` (`code`, such
+  as `ECONNRESET` or `UND_ERR_SOCKET`; no `cause`): what a failure below
+  HTTP throws, instead of a plain `Error`. The message is unchanged:
+  `Graph <operation> failed: fetch failed (ECONNREFUSED)` (#17).
+- `GraphHttpError` takes an optional fifth argument, a details object
+  (`mayHaveSent`, `clientRequestId`, `requestId`, `date`, `traceId`,
+  `correlationId`, `code`), and exposes those fields; its four positional
+  arguments are unchanged (#17, #19).
+- Request ids for `GraphMailDriver`: every Graph and token request carries
+  a fresh random `client-request-id`, and the token request sends
+  `return-client-request-id: true`. Every error keeps it; a
+  `GraphHttpError` also keeps Graph's `request-id` and `date`, and a token
+  error Entra's `trace_id` and `correlation_id`, when GUID-shaped. A token
+  error's message always names its `trace_id` and `correlation_id` on the
+  detail line; a Graph request's message names its ids only when the mail
+  may have been sent (`For Microsoft support: client-request-id …`) (#19).
+- `requestTimeoutMs` for both seam HTTP clients
+  (`@confidee/flowreel/rails-inertia`), 30 s by default:
+  `seamHttpFromRequest(request, { requestTimeoutMs })` passes it as
+  Playwright's per-call `timeout` (inside `@playwright/test` a request
+  context otherwise has none), and `seamHttpFromFetch(baseURL, options)`
+  now also takes `{ fetch, requestTimeoutMs, setTimeout, clearTimeout }`
+  besides the `fetch` function it took before. A seam request that runs
+  out is aborted and throws
+  `Seam <METHOD> <path> got no answer within 30 s; raise requestTimeoutMs if a job drain legitimately takes longer`
+  (#20).
+
+### Changed
+
+- `GraphMailDriver`: a failed `sendMail` or reply `send` now says whether
+  the mail may have been sent from everything observed, not only a
+  timeout. Any 5xx but 509 (503 included) and any transport failure that
+  does not prove the request never left (a reset or closed socket,
+  `terminated`, `EPIPE`, any code on a `read` or `write`, an unknown or
+  missing code) set `mayHaveSent`; a 3xx, a 4xx (429 included), 509 and
+  a DNS, connect or TLS failure (a `getaddrinfo` or `connect` syscall, or
+  a listed code on an error without a syscall) do not. An error status
+  whose body does not arrive within the bound stays a may-have-sent
+  timeout. A 2xx status now resolves the send at once, even when its empty
+  body then fails or never ends. Nothing is retried (#17).
+- `GraphMailDriver.waitFor`: a token request that is throttled or meets a
+  server error (HTTP 429, 500, 502, 503, 504, or OAuth error
+  `temporarily_unavailable`) is now re-polled instead of ending the wait,
+  after the response's Retry-After exactly, else 5 s, then 10 s, 20 s …
+  up to 60 s, never past the wait's end. A token request that got no
+  answer gets the same back-off. Credentials failures and token transport
+  errors stay fatal, and nothing is retried outside `waitFor` (#18). Only
+  consecutive failures double the back-off: a token obtained resets it.
+- `GraphMailDriver.health()`: a request that could not connect (a DNS,
+  connect or TLS failure) now points at the network path, not the
+  credentials.
+- `GraphMailDriver`: an error code from a response body (Graph's
+  `error.code`, Entra's `error`) is shown only when code-shaped, else as
+  `UnknownError`; and the client secret is redacted before the message is
+  joined into one line, so a secret split across a line break is not
+  reassembled.
 
 ### Fixed
 

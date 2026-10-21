@@ -50,6 +50,9 @@ const BASE = `https://graph.microsoft.com/v1.0${MAILBOX_PATH}`
 const TOKEN_URL = "https://login.microsoftonline.com/tenant-1/oauth2/v2.0/token"
 const SEND_HINT =
   ". The mail may have been sent; it is not retried, because a second send could mail twice."
+/** What a may-have-sent message names after the hint (#19). */
+const supportIds = (clientRequestId: string) =>
+  ` For Microsoft support: client-request-id ${clientRequestId}.`
 
 /** How a fake request ends. */
 type Answer =
@@ -72,6 +75,8 @@ interface Call {
   method: string
   body: string | undefined
   signal: AbortSignal | undefined
+  /** The client-request-id it was sent with (#19). */
+  id: string
   /**
    * The delay of the newest timer armed through the seam when fetch was
    * called: the bound the driver armed for this request.
@@ -119,6 +124,7 @@ function fakeFetch(c: VirtualClock, respond: (call: Call) => Answer) {
       method: init.method ?? "GET",
       body: init.body as string | undefined,
       signal: init.signal ?? undefined,
+      id: new Headers(init.headers).get("client-request-id") ?? "",
       timerMs: c.timers.at(-1)?.ms,
     }
     calls.push(call)
@@ -428,25 +434,27 @@ test.describe("what counts as a timeout", () => {
     const codeless = new TypeError("fetch failed", {
       cause: new Error(`other ${SECRET}`),
     })
-    const { fetch: fetch2 } = fakeFetch(c2, (call) =>
+    const { fetch: fetch2, calls: calls2 } = fakeFetch(c2, (call) =>
       isSendMail(call) ? codeless : undefined,
     )
     const error2 = rejected(await c2.run(driver(c2, fetch2).send(mail)))
+    // #17: a codeless transport error on a send may have been sent (hint + id).
     expect(error2.message).toBe(
-      `Graph POST ${MAILBOX_PATH}/sendMail failed: fetch failed`,
+      `Graph POST ${MAILBOX_PATH}/sendMail failed: fetch failed${SEND_HINT}${supportIds(calls2[1].id)}`,
     )
   })
 
   test("a transport failure with no error object still names the call", async () => {
     const c = virtualClock()
-    const { fetch } = fakeFetch(c, (call) =>
+    const { fetch, calls } = fakeFetch(c, (call) =>
       isSendMail(call)
         ? (Promise.reject(null) as Promise<Response>)
         : undefined,
     )
     const error = rejected(await c.run(driver(c, fetch).send(mail)))
+    // #17: a null rejection on a send may have been sent (hint + id).
     expect(error.message).toBe(
-      `Graph POST ${MAILBOX_PATH}/sendMail failed: null`,
+      `Graph POST ${MAILBOX_PATH}/sendMail failed: null${SEND_HINT}${supportIds(calls[1].id)}`,
     )
   })
 
@@ -639,7 +647,8 @@ test.describe("waitFor", () => {
     const d = driver(c, fetch, { requestTimeoutMs: 5_000 })
     const out = await c.run(d.waitFor(query(60_000)))
     expect(out.state).toBe("resolved")
-    expect(out.at - c.start).toBe(6_000)
+    // #18: a token timeout now gets the 5 s token back-off before poll's 1 s.
+    expect(out.at - c.start).toBe(11_000)
     expect(tokens).toBe(2)
     expect(calls.filter(isToken)[0].signal?.aborted).toBe(true)
   })
@@ -691,7 +700,7 @@ test.describe("the shared token request", () => {
 })
 
 test.describe("sends are never retried", () => {
-  for (const ending of ["hang", "deaf", "stall"] as const) {
+  for (const ending of ["hang", "deaf"] as const) {
     test(`a sendMail that gets no answer (${ending}) may have been sent`, async () => {
       const c = virtualClock()
       const { fetch, calls } = fakeFetch(c, (call) =>
@@ -703,12 +712,26 @@ test.describe("sends are never retried", () => {
       const timeout = error as GraphRequestTimeoutError
       expect(timeout.mayHaveSent).toBe(true)
       expect(timeout.operation).toBe(`POST ${MAILBOX_PATH}/sendMail`)
+      // #19: a may-have-sent message also names the client-request-id.
       expect(timeout.message).toBe(
-        `Graph POST ${MAILBOX_PATH}/sendMail got no answer within 30 s${SEND_HINT}`,
+        `Graph POST ${MAILBOX_PATH}/sendMail got no answer within 30 s${SEND_HINT}${supportIds(calls.filter(isSendMail)[0].id)}`,
       )
       expect(calls.filter(isSendMail)).toHaveLength(1)
     })
   }
+
+  // #17: a 2xx status means sent, so a sendMail whose 200 body then stalls
+  // resolves at once (it was the "stall" row of the may-have-sent loop).
+  test("a sendMail whose 2xx body never ends was sent: it resolves", async () => {
+    const c = virtualClock()
+    const { fetch, calls } = fakeFetch(c, (call) =>
+      isSendMail(call) ? "stall" : undefined,
+    )
+    const out = await c.run(driver(c, fetch).send(mail))
+    expect(out.state).toBe("resolved")
+    expect(c.now() - c.start).toBe(0)
+    expect(calls.filter(isSendMail)).toHaveLength(1)
+  })
 
   test("a reply whose send gets no answer may have been sent", async () => {
     const c = virtualClock()
@@ -725,8 +748,9 @@ test.describe("sends are never retried", () => {
     )
     expect(error).toBeInstanceOf(GraphRequestTimeoutError)
     expect((error as GraphRequestTimeoutError).mayHaveSent).toBe(true)
+    // #19: a may-have-sent message also names the client-request-id.
     expect(error.message).toBe(
-      `Graph POST ${MAILBOX_PATH}/messages/draft-1/send got no answer within 30 s${SEND_HINT}`,
+      `Graph POST ${MAILBOX_PATH}/messages/draft-1/send got no answer within 30 s${SEND_HINT}${supportIds(calls.filter(isDraftSend)[0].id)}`,
     )
     expect(calls.filter(isCreateReply)).toHaveLength(1)
     expect(calls.filter(isPatch)).toHaveLength(1)

@@ -535,6 +535,34 @@ const mail = new HttpSeamMailDriver({
 })
 ```
 
+Both HTTP clients bound every seam request as a whole, headers and body,
+by `requestTimeoutMs` (30 s by default), so a seam that never answers
+fails the run instead of hanging it:
+
+- `seamHttpFromRequest(request, { requestTimeoutMs? })` passes the bound
+  as Playwright's own per-call `timeout`, which covers the body too. This
+  matters inside `@playwright/test`: there a request context has no
+  timeout of its own (`actionTimeout`, which defaults to none), so without
+  it a seam that never answers waits forever. A timeout rejects with
+  Playwright's own error, in Playwright's wording. That error carries a
+  call log with the full URL and the context's request headers, the
+  persona's session cookie included: it is development only and loopback
+  only, but never paste it into a public issue.
+- `seamHttpFromFetch(baseURL, fetchOrOptions?)` takes either the `fetch`
+  to use (the original form) or an options object: `fetch`,
+  `requestTimeoutMs`, and `setTimeout` and `clearTimeout` (for unit
+  tests). Every request gets one
+  `AbortController` and one timer, unref'd and cleared however it ends.
+  At the bound the request is aborted and the call throws
+  `Seam <METHOD> <path> got no answer within 30 s; raise requestTimeoutMs if a job drain legitimately takes longer`.
+  The message never shows the body or the query string. Any other failure
+  is passed on as it is.
+
+`requestTimeoutMs` is a whole number of milliseconds from 1 to 2147483647;
+anything else is a `ConfigError` when the client is made. Raise it when a
+job drain (`POST /test/perform_enqueued_jobs`) legitimately takes longer
+than 30 s. Nothing is retried.
+
 `seamSignIn(api, baseURL, options)` posts `options.body` to the sign-in
 seam in a fresh request context and returns its storageState. Options:
 `path`, `accept(status)` (default any 2xx) and `failure(status)` (the
@@ -560,7 +588,7 @@ seam in a fresh request context and returns its storageState. Options:
 
 | Option                 | Default                                           | What it is for                                                                                                                    |
 | ---------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `http`                 | required                                          | `seamHttpFromRequest(request)` or `seamHttpFromFetch(baseURL, fetch?)`                                                            |
+| `http`                 | required                                          | `seamHttpFromRequest(request, options?)` or `seamHttpFromFetch(baseURL, fetchOrOptions?)`, both bounded (above)                   |
 | `defaultTimeoutMs`     | required                                          | the per-hop wait                                                                                                                  |
 | `paths`                | `DEFAULT_SEAM_PATHS`                              | `mailDeliveries`, `performEnqueuedJobs`, `inboundEmails`                                                                          |
 | `messageId(uuid)`      | `<flowreel-<uuid>@flowreel.invalid>`              | the Message-ID of a sent mail                                                                                                     |
@@ -683,17 +711,17 @@ flowreel reads no variables for the driver: your project's config reads
 the tenant id, client id, client secret, mailbox and reply domain (see
 [Configuration: secrets](configuration.md#secrets)) and passes them in.
 
-| Option                                                | What it is                                                                                                                                                                                                            |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tenantId`                                            | the directory (tenant) id                                                                                                                                                                                             |
-| `clientId`                                            | the app registration's application (client) id                                                                                                                                                                        |
-| `clientSecret`                                        | a client secret of the app. The only credential type in 0.x: no certificate                                                                                                                                           |
-| `mailbox`                                             | the QA mailbox: the requester the flows send as, and where the app's staging mail to the personas lands                                                                                                               |
-| `replyDomain`                                         | the only domain a send or reply may address (the staging reply domain)                                                                                                                                                |
-| `defaultTimeoutMs`                                    | the per-hop wait                                                                                                                                                                                                      |
-| `requestTimeoutMs`                                    | optional: the longest one request may take, from the connection to the last byte of the body, the token request included. Default `30_000`. A whole number of milliseconds from 1 to 2147483647, else a `ConfigError` |
-| `copy`                                                | optional wording: `guard` (the send guard's `SendGuardCopy`), `healthHint` (your setting names), `subjectRequired`                                                                                                    |
-| `fetch`, `now`, `sleep`, `setTimeout`, `clearTimeout` | for unit tests. The bound's timer is unref'd: a real `fetch` holds a socket until it fires, but a mocked or custom `fetch` that holds no handle may let the process exit first                                        |
+| Option                                                | What it is                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tenantId`                                            | the directory (tenant) id                                                                                                                                                                                                                                                                                       |
+| `clientId`                                            | the app registration's application (client) id                                                                                                                                                                                                                                                                  |
+| `clientSecret`                                        | a client secret of the app. The only credential type in 0.x: no certificate                                                                                                                                                                                                                                     |
+| `mailbox`                                             | the QA mailbox: the requester the flows send as, and where the app's staging mail to the personas lands                                                                                                                                                                                                         |
+| `replyDomain`                                         | the only domain a send or reply may address (the staging reply domain)                                                                                                                                                                                                                                          |
+| `defaultTimeoutMs`                                    | the per-hop wait                                                                                                                                                                                                                                                                                                |
+| `requestTimeoutMs`                                    | optional: the longest one request may take, from the connection to the last byte of the body, the token request included. Default `30_000`. A whole number of milliseconds from 1 to 2147483647, else a `ConfigError`                                                                                           |
+| `copy`                                                | optional wording: `guard` (the send guard's `SendGuardCopy`), `healthHint` (your setting names), `subjectRequired`                                                                                                                                                                                              |
+| `fetch`, `now`, `sleep`, `setTimeout`, `clearTimeout` | for unit tests. The bound's timer is unref'd: a real `fetch` holds a socket until it fires, but a mocked or custom `fetch` that holds no handle may let the process exit first. A project's own `fetch` must make one attempt per call and never follow a redirect: honour `redirect: "manual"` and never retry |
 
 What it does:
 
@@ -708,18 +736,34 @@ What it does:
 - **The send guard runs first**: every send and every reply recipient
   (Reply-To, else From) passes `assertReplyDomainRecipient` before any
   request, so a run can never mail a real mailbox.
-- **Never retried**: a send or a reply. Only `waitFor`'s reads are
+- **Never retried**: a send or a reply, and nothing outside `waitFor`
+  (`health()` and `saveEml()` included). Inside `waitFor` only these are
   re-polled: a `429`, `503` or `504` on the list (honouring Retry-After),
-  and a read, the token request included, that got no answer. Any other
-  failure ends the wait at once: auth, permission and token errors, and a
-  connection error such as `ECONNREFUSED` (a read that could not connect
-  is not a read that is slow).
+  a read that got no answer, and a transient token request (below). Any
+  other failure ends the wait at once: auth and permission errors, a
+  token request refused for its credentials, and a connection error such
+  as `ECONNREFUSED` (a read that could not connect is not a read that is
+  slow).
+- **A transient token request inside `waitFor` is re-polled**: HTTP `429`,
+  `500`, `502`, `503` or `504`, an OAuth `error` of
+  `temporarily_unavailable` (whatever the status), or no answer. Before
+  the next attempt the driver waits the response's Retry-After exactly
+  (seconds or an HTTP date), else 5 s, then 10 s, 20 s and so on up to
+  60 s, following Microsoft Entra's guidance for daemon apps; never past
+  the wait's own end, and on top of the wait's own back-off. What the wait
+  observed is reported by count only
+  (`Graph token request HTTP 503, retrying`,
+  `Graph token request got no answer within 30 s, retrying`), never the
+  error's text. A bad secret, tenant or consent (any other `400` or `401`)
+  stays fatal, and so does a token transport error. The decision never
+  reads `error_description` (the AADSTS text).
 - **Every request is bounded**: each Graph and token request, from the
   connection to the last byte of the body, gets `requestTimeoutMs` (30 s
   by default). Inside `waitFor` a request gets no more than the wait has
   left (at least 1 ms), and after the first attempt none starts once
-  nothing is left, so a wait always ends at its own `timeoutMs`. A request that runs out is aborted and throws
-  `GraphRequestTimeoutError` (`operation`, `timeoutMs`, `mayHaveSent`):
+  nothing is left, so a wait always ends at its own `timeoutMs`. A request
+  that runs out is aborted and throws `GraphRequestTimeoutError`
+  (`timeoutMs` besides the common fields below):
   `Graph <operation> got no answer within 30 s`. 30 s is deliberately
   stricter than the defaults around it: Microsoft's .NET Graph SDK and its
   Go client wait 100 s (its JavaScript SDK sets no request timeout), and
@@ -730,11 +774,62 @@ What it does:
   kiota_client_factory.go (`Timeout: time.Second * 100`), checked
   2026-10-21; undici 7 lib/dispatcher/client.js headersTimeout and
   bodyTimeout defaults (300 000 ms). -->
-- **A send that got no answer may have been sent**: a `sendMail` or a
-  reply's `send` that times out has `mayHaveSent: true` and says so,
-  because Graph may have accepted it before the answer was lost. It is
-  not retried. A `createReply` or PATCH that times out sent nothing, but
-  can leave an unsent draft in the QA mailbox's Drafts folder.
+- **Redirects are never followed**: every Graph and token request uses
+  `redirect: "manual"`, so a 3xx is the answer, a `GraphHttpError` with
+  that status and `mayHaveSent: false`. Followed, a 307 or 308 would
+  re-send the body: a mail a second time, or the token request's client
+  secret to the redirect target.
+- **Every error is a `GraphRequestError`** (`operation`, `mayHaveSent`,
+  `clientRequestId`), and its message is one line. A bad 2xx answer (a
+  body that is not JSON, a token answer without `access_token`) is a
+  plain `GraphRequestError` with `mayHaveSent: false`. Three kinds extend
+  it: `GraphHttpError` (a non-2xx answer: `status`, `retryAfterMs`,
+  `code`, `requestId`, `date`, and for a token error `traceId` and
+  `correlationId`), `GraphRequestTimeoutError` (no answer) and
+  `GraphTransportError` (a failure below HTTP; no `cause`). Their `code`
+  fields differ: `GraphHttpError.code` is the API's error code (Graph's
+  `ErrorAccessDenied`, Entra's `invalid_client`), shown only when it is
+  code-shaped (else the message says `UnknownError`);
+  `GraphTransportError.code` is the OS or undici code (`ECONNRESET`,
+  `UND_ERR_SOCKET`).
+- **Whether a failed send may have gone out** (`mayHaveSent`) is decided
+  from what was observed, for the request that sends (`sendMail`, a
+  reply's `send`) only. A false "may have been sent" costs a search; a
+  false "not sent" could cost a duplicate mail, so anything not proven is
+  treated as possibly sent:
+
+  | What happened to the sending request                                                                                                                                                                                                                                                                                                                                                                                                                            | `mayHaveSent`               |
+  | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+  | A 2xx status (even if its empty body then fails)                                                                                                                                                                                                                                                                                                                                                                                                                | no error: the send resolves |
+  | Any 3xx or 4xx (`429` included), or `509`                                                                                                                                                                                                                                                                                                                                                                                                                       | `false`                     |
+  | Any other 5xx (`500`, `502`, `503`, `504`, …)                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                      |
+  | A transport failure in DNS, connect or TLS: the cause's `syscall` is `getaddrinfo` or `connect`; or, when it names no syscall, its code is `ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, `EAI_FAIL`, `EHOSTUNREACH`, `ENETUNREACH`, `UND_ERR_CONNECT_TIMEOUT` or a TLS or certificate code (`ERR_SSL_*`, `ERR_TLS_HANDSHAKE_TIMEOUT`, `CERT_HAS_EXPIRED`, `CERT_NOT_YET_VALID`, `CERT_REVOKED`, `HOSTNAME_MISMATCH`, …); for an `AggregateError`, every inner error | `false`                     |
+  | Any other transport failure: a reset or closed socket (`ECONNRESET` while reading, `UND_ERR_SOCKET`), `terminated`, `EPIPE`, any code on a `read` or `write` (`write EHOSTUNREACH` came after the connection was up), an unknown or missing code                                                                                                                                                                                                                | `true`                      |
+  | No answer before the status line (a timeout)                                                                                                                                                                                                                                                                                                                                                                                                                    | `true`                      |
+  | An error status arrived, but its body did not within the bound (a timeout)                                                                                                                                                                                                                                                                                                                                                                                      | `true` (conservative)       |
+
+  Nothing is retried either way. When `mayHaveSent` is true the message
+  says `The mail may have been sent; it is not retried, because a second send could mail twice.`
+  and names the ids Microsoft support can trace it by. A `createReply` or
+  PATCH failure never sent anything (`mayHaveSent: false`), but can leave
+  an unsent draft in the QA mailbox's Drafts folder. A token failure
+  before a send sent nothing either.
+
+- **Request ids**: every Graph and token request carries a fresh random
+  `client-request-id` (a UUID), and the token request asks Entra to echo
+  it (`return-client-request-id: true`). Every error keeps it as
+  `clientRequestId`. A `GraphHttpError` also keeps Graph's `request-id`
+  (the response header, else the body's `innerError`) as `requestId` and
+  the response's `Date` as `date` (ISO 8601), and a token error keeps
+  Entra's `trace_id` and `correlation_id` as `traceId` and `correlationId`.
+  A server id is kept only when it is GUID-shaped, a date only when it
+  parses. Which ids a message names: a token error always names its
+  `trace_id` and `correlation_id` on its detail line (support handles for
+  a configuration error such as a bad secret); a Graph request names its
+  ids only when the mail may have been sent, ending with
+  `For Microsoft support: client-request-id <id>, request-id <id>, date <time>.`
+  No other message names an id. None of them is a secret, so none is
+  redacted.
 - **One token request at a time**: callers share it, and it always gets
   the full `requestTimeoutMs`. A wait with less time left stops waiting
   for it without cutting it short for the others, so the request can keep
@@ -752,10 +847,12 @@ What it does:
   the resolved `qa@`.
 - **No secret in an error**: errors carry the HTTP status and Graph's error
   code; the access token and the client secret are redacted, and a
-  transport error is re-thrown without its cause, keeping only the cause's
-  system error code (`fetch failed (ECONNREFUSED)`).
-- **`health()`** reads one message id. When a request got no answer, its
-  message points at the network path instead of the credentials.
+  transport error is re-thrown as a `GraphTransportError` without its
+  cause, keeping only the cause's system error code
+  (`fetch failed (ECONNREFUSED)`).
+- **`health()`** reads one message id. When a request got no answer, or
+  could not connect (a DNS, connect or TLS failure), its message points at
+  the network path instead of the credentials.
   **`saveEml()`** saves the raw MIME (`$value`) under the results folder.
 
 The tenant setup below is independent of the driver code. A tenant

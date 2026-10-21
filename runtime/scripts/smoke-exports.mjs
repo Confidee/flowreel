@@ -48,7 +48,13 @@ try {
       "HttpSeamMailDriver",
       "seamSignIn",
     ],
-    "./mail-graph": ["GraphMailDriver", "GraphHttpError", "toMailMessage"],
+    "./mail-graph": [
+      "GraphMailDriver",
+      "GraphHttpError",
+      "GraphRequestError",
+      "GraphTransportError",
+      "toMailMessage",
+    ],
   }
 
   const subpaths = Object.keys(pkg.exports).filter(

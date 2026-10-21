@@ -135,3 +135,10 @@ Common messages:
   do not retry before the app's lockout window has passed.
 - `… are both set, to different values`: `FLOWREEL_<KEY>` and a project
   alias disagree; the user unsets one.
+- `The mail may have been sent; it is not retried …`, followed by
+  `For Microsoft support: client-request-id …` (`mayHaveSent`): a FAIL that needs a check in the app before any re-run.
+  The mail may have arrived: the user searches the app for the run id or
+  the record, or runs an Exchange message trace by sender and subject.
+  Quote the `client-request-id` (and `request-id` and `date`, when named)
+  for Microsoft support. Never propose re-sending the mail, by hand or by
+  re-running, before that check.

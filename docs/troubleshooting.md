@@ -119,16 +119,49 @@ Check the network path from the machine that runs flowreel to
 `login.microsoftonline.com` and `graph.microsoft.com` (proxy, firewall,
 DNS, VPN) and Microsoft 365's service health. Inside a `waitFor`, such a
 read is re-polled until the wait's own timeout, which then reports
-`Last observed: Graph request got no answer within …, retrying`. Raise
+`Last observed: Graph request got no answer within …, retrying` (or
+`Graph token request got no answer within …, retrying`). Raise
 `requestTimeoutMs` only when answers are slow rather than missing.
 
-**`… got no answer within 30 s. The mail may have been sent; it is not retried, because a second send could mail twice.`**
-A `sendMail` or a reply's `send` got no answer, and Graph may have sent
-the mail anyway (`mayHaveSent: true`). Before you run the flow again,
-search the app for the run id or for the record the mail was meant to
-create or update: if it is there, the mail arrived. Never re-send it by
-hand. A `createReply` or PATCH that got no answer sent nothing, but may
-have left an unsent draft in the QA mailbox's Drafts folder: delete it.
+**`Graph mailbox health check failed … Could not connect, which is a network problem, not a credentials one …`**
+The health check's request failed before it reached Microsoft: DNS, the
+connection or TLS (`ECONNREFUSED`, `ENOTFOUND`, a certificate error, often
+a proxy or TLS inspection). Check the network path from the machine that
+runs flowreel; the credentials were never tried.
+
+**`… The mail may have been sent; it is not retried, because a second send could mail twice. For Microsoft support: client-request-id …`**
+A `sendMail` or a reply's `send` failed in a way that does not prove the
+mail stayed unsent (`mayHaveSent: true`): it got no answer
+(`got no answer within 30 s`), Graph answered with a 5xx other than 509
+(`HTTP 500`, `HTTP 503`, …), or the connection failed after it was made
+(`fetch failed (ECONNRESET)`, `(UND_ERR_SOCKET)`, `terminated`). Treat it
+as a FAIL that needs a check before anything else, and never re-send the
+mail by hand: a second send can mail twice. Check, in this order:
+
+1. Search the app for the run id, or for the record the mail was meant to
+   create or update. If it is there, the mail arrived.
+2. In the Exchange admin center, run a message trace for the QA mailbox as
+   sender and the run's subject.
+3. With the `client-request-id` (and `request-id` and `date`, when the
+   message names them), look the request up in the tenant's Microsoft
+   Graph activity logs, or quote them to Microsoft support.
+
+Then run the flow again. A not-sent failure has no such hint: a 3xx, a
+4xx (`429` included) or `509`, or a DNS, connect or TLS failure
+(`fetch failed (ECONNREFUSED)`, `(ENOTFOUND)`, a certificate error) never
+sent anything. A `createReply` or PATCH failure sent nothing either, but
+may have left an unsent draft in the QA mailbox's Drafts folder: delete
+it.
+
+**`Timed out … Last observed: Graph token request HTTP 503, retrying`**
+Microsoft Entra's sign-in endpoint was throttling or failing for the whole
+wait. Inside `waitFor` the driver retries the token request after the
+answer's Retry-After, else after 5 s, 10 s, 20 s and so on up to 60 s.
+Check Microsoft 365's service health and whether other runs share the app
+registration. A token request refused for its credentials (`HTTP 400` or
+`HTTP 401` with `invalid_client`, a missing tenant or consent) is never
+retried: it ends the wait at once with its AADSTS code, and, when Entra
+sent them, its `trace_id` and `correlation_id`.
 
 **`InboundBudgetError: Refusing inbound mail "…": this staging tour already sent 3 of at most 3 …`**
 The tour's per-run budget refused the send before it happened. Create the
