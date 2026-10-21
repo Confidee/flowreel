@@ -564,15 +564,15 @@ test.describe("requests", () => {
     expect(lists).toBe(1)
   })
 
-  test("a throttled token request stays fatal inside waitFor", async () => {
+  // #18: a throttled (429) token request is now re-polled inside waitFor
+  // (mail-graph-token-transient.spec.ts); a credentials failure stays fatal.
+  test("a token request refused for its credentials stays fatal inside waitFor", async () => {
     const { fetch, calls } = fakeFetch(({ url }) =>
-      url === TOKEN_URL
-        ? json(429, { error: "temporarily_unavailable" })
-        : undefined,
+      url === TOKEN_URL ? json(401, { error: "invalid_client" }) : undefined,
     )
     await expect(
       driver(fetch).waitFor({ subjectIncludes: "RQ-4", since: new Date() }),
-    ).rejects.toThrow(/Graph token request failed: HTTP 429/)
+    ).rejects.toThrow(/Graph token request failed: HTTP 401/)
     expect(calls).toHaveLength(1)
   })
 

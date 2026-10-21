@@ -1,9 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { randomUUID } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
-import { ConfigError, SendRefusedError } from "../core/errors.js"
+import { SendRefusedError } from "../core/errors.js"
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  type FetchLike,
+  type TimerHandle,
+  assertRequestTimeoutMs,
+  fetchWithin,
+  formatBound,
+} from "../core/http.js"
 import { poll } from "../core/poll.js"
 import {
   DEFAULT_SEND_GUARD_COPY,
@@ -19,6 +28,31 @@ import type {
   ReplyMail,
   SendResult,
 } from "../mail/types.js"
+import {
+  GraphHttpError,
+  GraphRequestError,
+  GraphRequestTimeoutError,
+  GraphTransportError,
+  oneLine,
+} from "./errors.js"
+import {
+  TOKEN_OPERATION,
+  isTransientRead,
+  isTransientToken,
+  statusMayHaveSent,
+  tokenBackoffMs,
+  transportCode,
+  transportMayHaveSent,
+} from "./outcome.js"
+
+export {
+  GraphHttpError,
+  type GraphHttpErrorDetails,
+  GraphRequestError,
+  GraphRequestTimeoutError,
+  GraphTransportError,
+} from "./errors.js"
+export type { FetchLike }
 
 // The staging mail driver: one Microsoft 365 mailbox (the QA mailbox) that
 // is both the requester the flows send as and where the app's staging mail
@@ -35,8 +69,18 @@ import type {
 // the connection to the last byte of the body it gets requestTimeoutMs
 // (30 s by default), and inside waitFor never more than the wait has left.
 // A request that runs out is aborted and ends in a GraphRequestTimeoutError.
-// Nothing is retried except waitFor's reads; a send that got no answer is
-// reported as possibly sent (mayHaveSent), never sent again.
+// Every request carries a fresh client-request-id, and every error the
+// driver throws is a GraphRequestError naming it. No request follows a
+// redirect (`redirect: "manual"`): a 3xx is a failure that sent nothing.
+//
+// Nothing is retried except inside waitFor: its reads, and its token
+// request when that is throttled or meets a server error. A send (sendMail,
+// a reply draft's /send) is never retried. Whether a failed send may have
+// gone out is decided from what was observed (outcome.ts): a 2xx status
+// means sent; a 3xx, a 4xx, 509 and a DNS, connect or TLS failure mean not
+// sent; any other 5xx, any other transport failure and no answer mean it
+// may have been sent (mayHaveSent), and the message says so and names the
+// ids Microsoft support needs.
 //
 // The QA mailbox may also be the staging sandbox sink (where every
 // redirected staging mail lands), so waitFor reads as little of it as it
@@ -48,19 +92,19 @@ import type {
 
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 const TOKEN_SKEW_MS = 60_000
-const TOKEN_OPERATION = "token request"
-/** The bound of one request when the project sets none. */
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
-/** setTimeout's longest delay. */
-const MAX_TIMER_MS = 2_147_483_647
 const SEND_HINT =
   ". The mail may have been sent; it is not retried, because a second send could mail twice."
+const NO_CONNECTION_HINT =
+  "Could not connect, which is a network problem, not a credentials one: check the network path (proxy, firewall, DNS, TLS inspection) from this machine to login.microsoftonline.com and graph.microsoft.com."
 const NO_ANSWER_HINT =
   "No answer is a network or timeout problem, not a credentials one: check the network path (proxy, firewall, DNS) from this machine to login.microsoftonline.com and graph.microsoft.com."
-// Throttling / gateway blips on the waitFor list READ are re-polled. Sends and
-// replies are never retried (a retry can mail twice); auth, permission and
-// token errors are real failures, so they stay fatal too.
-const TRANSIENT_READ_STATUSES = new Set([429, 503, 504])
+/**
+ * Transport errors proven never to have left this machine (DNS, connect,
+ * TLS): health() blames the network for them, not the credentials.
+ */
+const NEVER_CONNECTED = new WeakSet<GraphTransportError>()
+/** A server-side id (request-id, trace_id, correlation_id): a GUID, nothing else. */
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 // The list: just enough to pick the harness's own mail by subject and time.
 const LIST_FIELDS = ["id", "subject", "receivedDateTime"].join(",")
 // One candidate whose subject matched: everything matching and the flows need.
@@ -77,13 +121,6 @@ const MESSAGE_FIELDS = [
   "internetMessageHeaders",
 ].join(",")
 const TEXT_BODY = { Prefer: 'outlook.body-content-type="text"' }
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
-
-/** A timer handle (Node's, or a test's). */
-interface TimerHandle {
-  unref?(): unknown
-}
 
 /** The wording of the driver's refusals and hints that a project may tailor. */
 export interface GraphDriverCopy {
@@ -128,6 +165,10 @@ export interface GraphMailDriverOptions {
   requestTimeoutMs?: number
   /** Override any of the refusal and hint wording. */
   copy?: Partial<GraphDriverCopy>
+  /**
+   * For tests, or a project's own transport. It must make one attempt per
+   * call and never follow a redirect: honour `redirect: "manual"`.
+   */
   fetch?: FetchLike
   now?: () => number
   sleep?: (ms: number) => Promise<void>
@@ -154,50 +195,6 @@ interface GraphMessage {
   internetMessageHeaders?: { name: string; value: string }[]
 }
 
-/** A non-2xx Graph/AAD response. The message is already redacted. */
-export class GraphHttpError extends Error {
-  constructor(
-    message: string,
-    readonly operation: string,
-    readonly status: number,
-    /** From Retry-After (seconds or HTTP date), when the response sent one. */
-    readonly retryAfterMs: number | undefined,
-  ) {
-    super(message)
-    this.name = "GraphHttpError"
-  }
-}
-
-/**
- * A Graph or token request that got no answer within its bound
- * (requestTimeoutMs, or what a waitFor had left); the driver aborted it.
- * The message is already redacted and names the operation, never the
- * request. It carries no `cause`, and it is never a GraphHttpError or a
- * core TimeoutError. `mayHaveSent` is true only for a request that sends
- * mail (sendMail, a reply draft's send): Graph may have accepted it before
- * the answer was lost, and the driver never sends it again.
- */
-export class GraphRequestTimeoutError extends Error {
-  constructor(
-    message: string,
-    readonly operation: string,
-    /** The bound the request had, in milliseconds. */
-    readonly timeoutMs: number,
-    readonly mayHaveSent: boolean,
-  ) {
-    super(message)
-    this.name = "GraphRequestTimeoutError"
-  }
-}
-
-/** One request's answer, its body read in full within the bound. */
-interface GraphReply {
-  status: number
-  ok: boolean
-  headers: Headers
-  text: string
-}
-
 /** What a Graph request sends and how it is bounded. */
 interface GraphRequest {
   json?: unknown
@@ -208,23 +205,30 @@ interface GraphRequest {
   sends?: boolean
 }
 
-/** "30 s" for whole seconds, else "300 ms". */
-function formatBound(ms: number): string {
-  return ms % 1000 === 0 ? `${ms / 1000} s` : `${ms} ms`
-}
-
 /**
- * A transport error's own message plus, when its cause has one, the
- * system error code (ECONNREFUSED, ENOTFOUND): nothing else of the cause,
- * which may echo the request.
+ * A transport error's own message plus, when it has one, the system error
+ * code (ECONNREFUSED, UND_ERR_SOCKET): nothing else of the cause, which may
+ * echo the request.
  */
-function describeTransportError(error: unknown): string {
+function describeTransportError(
+  error: unknown,
+  code: string | undefined,
+): string {
   const message =
     (error as { message?: unknown } | null)?.message ?? String(error)
-  const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code
-  return typeof code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(code)
-    ? `${String(message)} (${code})`
-    : String(message)
+  return code === undefined ? String(message) : `${String(message)} (${code})`
+}
+
+/** `value` when it is a GUID, else undefined. */
+function guid(value: unknown): string | undefined {
+  return typeof value === "string" && GUID.test(value) ? value : undefined
+}
+
+/** A Date header as an ISO 8601 instant, when it parses. */
+function isoDate(value: string | null): string | undefined {
+  if (!value) return undefined
+  const at = Date.parse(value)
+  return Number.isNaN(at) ? undefined : new Date(at).toISOString()
 }
 
 function parseRetryAfter(
@@ -351,15 +355,10 @@ export class GraphMailDriver implements MailDriver {
   constructor(private readonly options: GraphMailDriverOptions) {
     const requestTimeoutMs =
       options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
-    if (
-      !Number.isInteger(requestTimeoutMs) ||
-      requestTimeoutMs < 1 ||
-      requestTimeoutMs > MAX_TIMER_MS
-    ) {
-      throw new ConfigError(
-        `GraphMailDriver option requestTimeoutMs must be a whole number of milliseconds from 1 to ${MAX_TIMER_MS}.`,
-      )
-    }
+    assertRequestTimeoutMs(
+      requestTimeoutMs,
+      "GraphMailDriver option requestTimeoutMs",
+    )
     this.requestTimeoutMs = requestTimeoutMs
     this.setTimer = options.setTimeout ?? ((fn, ms) => setTimeout(fn, ms))
     this.clearTimer =
@@ -385,11 +384,14 @@ export class GraphMailDriver implements MailDriver {
         `${this.mailboxPath()}/messages?$top=1&$select=id`,
       )
     } catch (error) {
-      // A request that got no answer says nothing about the credentials.
+      // A request that got no answer, or could not connect, says nothing
+      // about the credentials.
       const hint =
         error instanceof GraphRequestTimeoutError
           ? NO_ANSWER_HINT
-          : this.copy.healthHint
+          : error instanceof GraphTransportError && NEVER_CONNECTED.has(error)
+            ? NO_CONNECTION_HINT
+            : this.copy.healthHint
       throw new Error(
         `Graph mailbox health check failed for ${this.options.mailbox}: ${(error as Error).message}. ${hint}`,
         { cause: error },
@@ -404,8 +406,12 @@ export class GraphMailDriver implements MailDriver {
    * setting Message-ID, so callers correlate by subject / run id and the
    * result's messageId is "".
    *
-   * Never retried. A sendMail that got no answer throws a
-   * GraphRequestTimeoutError with mayHaveSent: Graph may have sent it.
+   * Never retried. A 2xx status means sent, even if its (empty) body then
+   * fails. A failure that leaves the outcome open (no answer, any 5xx but
+   * 509, a transport failure after the connection) throws a
+   * GraphRequestError with mayHaveSent true, whose message says so and
+   * names the client-request-id; a 3xx, a 4xx, 509, or a DNS, connect or
+   * TLS failure has mayHaveSent false.
    */
   async send(mail: OutgoingMail): Promise<SendResult> {
     const to = assertReplyDomainRecipient(
@@ -443,9 +449,14 @@ export class GraphMailDriver implements MailDriver {
    *
    * Each request gets at most what the wait has left (at least 1 ms). The
    * first attempt always runs; after it, no request is issued once nothing
-   * is left, and the last state observed is reported. A read (the token request included) that got
-   * no answer, a throttle (429) or a gateway blip (503, 504) is re-polled;
-   * any other failure, a connection error included, ends the wait at once.
+   * is left, and the last state observed is reported. A read that got no
+   * answer, a throttle (429) or a gateway blip (503, 504) is re-polled. A
+   * token request that got no answer, was throttled (429), met a server
+   * error (500, 502, 503, 504) or was told temporarily_unavailable is
+   * re-polled after Retry-After when sent, else after 5 s, 10 s, 20 s … up
+   * to 60 s; never past the wait's end. Any other failure, a connection
+   * error included, ends the wait at once. What a re-poll observed is
+   * reported count-only: never an error's text.
    */
   async waitFor(query: MailQuery): Promise<MailMessage> {
     const subject = query.subjectIncludes
@@ -462,6 +473,8 @@ export class GraphMailDriver implements MailDriver {
     const deadline = this.now() + timeoutMs
     // A message's content does not change: fetch each candidate once.
     const fetched = new Map<string, MailMessage>()
+    /** Consecutive transient token failures: the back-off doubles with each. */
+    let tokenFailures = 0
     let lastObserved: string | undefined
     const observe = (observed: string) => {
       lastObserved = observed
@@ -475,6 +488,10 @@ export class GraphMailDriver implements MailDriver {
           return { observed: lastObserved }
         }
         try {
+          // A token in hand ends a run of token failures: only consecutive
+          // ones double the back-off.
+          await this.accessToken(deadline)
+          tokenFailures = 0
           const candidates = (
             await this.listSince(guarded.since, subject, deadline)
           )
@@ -508,13 +525,28 @@ export class GraphMailDriver implements MailDriver {
               : `${candidates.length} message(s) with ${JSON.stringify(subject)} in the subject since the query start, none matching`,
           )
         } catch (error) {
+          if (isTransientToken(error)) {
+            tokenFailures += 1
+            const wait = tokenBackoffMs(
+              error instanceof GraphHttpError ? error.retryAfterMs : undefined,
+              tokenFailures,
+              deadline - this.now(),
+            )
+            if (wait > 0) await this.sleep(wait)
+            // Count-only: never the error's text (an AADSTS description).
+            return observe(
+              error instanceof GraphHttpError
+                ? `Graph token request HTTP ${error.status}, retrying`
+                : `Graph token request got no answer within ${formatBound(error.timeoutMs)}, retrying`,
+            )
+          }
+          if (!isTransientRead(error)) throw error
           if (error instanceof GraphRequestTimeoutError) {
             // Count-only like the rest: the operation names a message id.
             return observe(
               `Graph request got no answer within ${formatBound(error.timeoutMs)}, retrying`,
             )
           }
-          if (!this.isTransientRead(error)) throw error
           const wait = Math.min(
             error.retryAfterMs ?? 0,
             Math.max(0, deadline - this.now()),
@@ -579,9 +611,10 @@ export class GraphMailDriver implements MailDriver {
    * before the draft exists: an app mail without Reply-To would otherwise
    * be answered at its From, the real support address.
    *
-   * Never retried. A send step that got no answer throws a
-   * GraphRequestTimeoutError with mayHaveSent; a createReply or PATCH that
-   * got none leaves at most an unsent draft in the mailbox.
+   * Never retried. The send step is classified like send(): a failure
+   * that leaves the outcome open has mayHaveSent true. A createReply or
+   * PATCH failure, whatever it is, leaves at most an unsent draft in the
+   * mailbox (mayHaveSent false).
    */
   async reply(original: MailMessage, mail: ReplyMail): Promise<SendResult> {
     const to = assertReplyDomainRecipient(
@@ -620,14 +653,6 @@ export class GraphMailDriver implements MailDriver {
     const file = join(dir, `${n}-${slugify(message.subject)}.eml`)
     await writeFile(file, raw)
     return file
-  }
-
-  private isTransientRead(error: unknown): error is GraphHttpError {
-    return (
-      error instanceof GraphHttpError &&
-      error.operation !== TOKEN_OPERATION &&
-      TRANSIENT_READ_STATUSES.has(error.status)
-    )
   }
 
   /** No `from` when sending as the mailbox itself (no send-as needed). */
@@ -676,7 +701,11 @@ export class GraphMailDriver implements MailDriver {
       url,
       {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          // Entra echoes the client-request-id only when asked.
+          "return-client-request-id": "true",
+        },
         body: new URLSearchParams({
           client_id: clientId,
           client_secret: clientSecret,
@@ -686,16 +715,24 @@ export class GraphMailDriver implements MailDriver {
       },
       this.requestTimeoutMs,
     )
+    // A bad answer is a GraphRequestError too: it sent nothing.
+    const bad = (message: string) =>
+      new GraphRequestError(
+        this.redact(message),
+        TOKEN_OPERATION,
+        false,
+        reply.clientRequestId,
+      )
     let body: { access_token?: string; expires_in?: number } | null
     try {
       body = JSON.parse(reply.text) as typeof body
     } catch {
-      throw new Error(
+      throw bad(
         `Graph token request returned a non-JSON ${reply.status} body (${reply.headers.get("content-type") ?? "unknown type"})`,
       )
     }
     if (!body?.access_token) {
-      throw new Error("Graph token request failed: no access_token returned")
+      throw bad("Graph token request failed: no access_token returned")
     }
     this.token = {
       value: body.access_token,
@@ -735,10 +772,13 @@ export class GraphMailDriver implements MailDriver {
       // A proxy/login interstitial or HTML error page: name the call, never
       // echo the body.
       const type = reply.headers.get("content-type") ?? "unknown type"
-      throw new Error(
+      throw new GraphRequestError(
         this.redact(
           `Graph ${operation} returned a non-JSON ${reply.status} body (${type})`,
         ),
+        operation,
+        false,
+        reply.clientRequestId,
       )
     }
   }
@@ -774,28 +814,50 @@ export class GraphMailDriver implements MailDriver {
     return timer
   }
 
+  /**
+   * What a may-have-sent message adds: the hint, then the ids Microsoft
+   * support can trace the request by (none of them a secret).
+   */
+  private sentHint(
+    clientRequestId: string,
+    requestId?: string,
+    date?: string,
+  ): string {
+    const ids = [`client-request-id ${clientRequestId}`]
+    if (requestId) ids.push(`request-id ${requestId}`)
+    if (date) ids.push(`date ${date}`)
+    return `${SEND_HINT} For Microsoft support: ${ids.join(", ")}.`
+  }
+
   private timeoutError(
     operation: string,
     ms: number,
     sends: boolean,
+    clientRequestId: string | undefined,
   ): GraphRequestTimeoutError {
+    const hint = sends && clientRequestId ? this.sentHint(clientRequestId) : ""
     return new GraphRequestTimeoutError(
       this.redact(
-        `Graph ${operation} got no answer within ${formatBound(ms)}${sends ? SEND_HINT : ""}`,
+        `Graph ${operation} got no answer within ${formatBound(ms)}${hint}`,
       ),
       operation,
       ms,
       sends,
+      clientRequestId,
     )
   }
 
-  /** Waits at most `ms` for a shared request, never cancelling it. */
+  /**
+   * Waits at most `ms` for a shared request, never cancelling it. A
+   * timeout here is the waiter's own: it names no client-request-id (the
+   * request belongs to whoever started it).
+   */
   private async within<T>(
     shared: Promise<T>,
     operation: string,
     ms: number,
   ): Promise<T> {
-    const timeout = this.timeoutError(operation, ms, false)
+    const timeout = this.timeoutError(operation, ms, false, undefined)
     let timer: TimerHandle | undefined
     const expired = new Promise<never>((_, reject) => {
       timer = this.arm(() => reject(timeout), ms)
@@ -808,87 +870,91 @@ export class GraphMailDriver implements MailDriver {
   }
 
   /**
-   * One request, bounded as a whole: the fetch, the headers and the whole
-   * body end within `ms`, or the request is aborted and a
-   * GraphRequestTimeoutError thrown. Non-2xx becomes a GraphHttpError.
-   * Every message passes through redact().
+   * One request, bounded as a whole (core/http.ts): the fetch, the headers
+   * and the whole body end within `ms`, or the request is aborted and a
+   * GraphRequestTimeoutError thrown. It carries a fresh client-request-id.
+   * Non-2xx becomes a GraphHttpError, a transport failure a
+   * GraphTransportError; for a request that `sends`, a 2xx is sent (its
+   * body is not read) and the failure is classified (outcome.ts). Every
+   * message passes through redact().
    */
   private async call(
     operation: string,
     url: string,
-    init: RequestInit,
+    init: { method: string; headers: Record<string, string>; body?: string },
     ms: number,
     sends = false,
-  ): Promise<GraphReply> {
-    const timeout = this.timeoutError(operation, ms, sends)
-    const controller = new AbortController()
-    let expire!: (reason: GraphRequestTimeoutError) => void
-    // Raced against the fetch and the body read, so a fetch that ignores its
-    // signal, or a body that never ends, still ends at the bound.
-    const expired = new Promise<never>((_, reject) => {
-      expire = reject
-    })
-    expired.catch(() => {})
-    // A plain AbortController and timer on purpose, not AbortSignal.timeout
-    // or AbortSignal.any: on Node 20 their signals can be garbage-collected
-    // mid-request and never fire (nodejs/node#57736).
-    const timer = this.arm(() => {
-      // Rejected first, so the race settles with the driver's own error.
-      expire(timeout)
-      controller.abort(timeout)
-    }, ms)
+  ): Promise<{
+    status: number
+    headers: Headers
+    text: string
+    clientRequestId: string
+  }> {
+    const clientRequestId = randomUUID()
+    const timeout = this.timeoutError(operation, ms, sends, clientRequestId)
+    let reply: Awaited<ReturnType<typeof fetchWithin>>
     try {
-      let reply: GraphReply
-      try {
-        const response = await Promise.race([
-          this.fetchImpl(url, { ...init, signal: controller.signal }),
-          expired,
-        ])
-        const text = await Promise.race([response.text(), expired]).catch(
-          (error: unknown) => {
-            // A failed reply whose body cannot be read is reported by its
-            // status alone; a 2xx whose body cannot be read is a failure.
-            if (response.ok || controller.signal.reason === timeout) {
-              throw error
-            }
-            return ""
-          },
-        )
-        reply = {
-          status: response.status,
-          ok: response.ok,
-          headers: response.headers,
-          text,
-        }
-      } catch (error) {
-        // Identity, never the error's name: only the driver's own bound is a
-        // timeout; any other AbortError is a transport error.
-        if (error === timeout || controller.signal.reason === timeout) {
-          throw timeout
-        }
-        // No `cause`: a transport error's message/stack may echo the request
-        // (Authorization header); only the redacted text may leave this
-        // method, plus the cause's system error code.
-        // eslint-disable-next-line preserve-caught-error
-        throw new Error(
-          this.redact(
-            `Graph ${operation} failed: ${describeTransportError(error)}`,
-          ),
-        )
-      }
-      if (reply.ok) return reply
-      const detail = errorDetail(reply.text)
-      throw new GraphHttpError(
+      reply = await fetchWithin(
+        this.fetchImpl,
+        url,
+        {
+          ...init,
+          headers: { ...init.headers, "client-request-id": clientRequestId },
+          // Never follow (#22): a followed 307/308 re-sends the body, which
+          // can send a mail twice or carry the client secret elsewhere. A
+          // 3xx is the answer: a GraphHttpError that sent nothing.
+          redirect: "manual",
+        },
+        ms,
+        timeout,
+        {
+          setTimeout: this.setTimer,
+          clearTimeout: this.clearTimer,
+          // Once a send's 2xx status arrived, it was sent: its (empty) body
+          // is not waited for, so a body failure cannot turn it into an error.
+          readBody: sends ? (response) => !response.ok : undefined,
+        },
+      )
+    } catch (error) {
+      if (error === timeout) throw timeout
+      const code = transportCode(error)
+      const mayHaveSent = sends && transportMayHaveSent(error)
+      // No `cause`: a transport error's message/stack may echo the request
+      // (Authorization header); only the redacted text may leave this
+      // method, plus the system error code.
+      const transport = new GraphTransportError(
         this.redact(
-          `Graph ${operation} failed: HTTP ${reply.status}${detail ? ` ${detail}` : ""}`,
+          `Graph ${operation} failed: ${describeTransportError(error, code)}${mayHaveSent ? this.sentHint(clientRequestId) : ""}`,
         ),
         operation,
-        reply.status,
-        parseRetryAfter(reply.headers.get("retry-after"), this.now()),
+        { code, mayHaveSent, clientRequestId },
       )
-    } finally {
-      this.clearTimer(timer)
+      if (!transportMayHaveSent(error)) NEVER_CONNECTED.add(transport)
+      // eslint-disable-next-line preserve-caught-error
+      throw transport
     }
+    if (reply.ok) return { ...reply, clientRequestId }
+    const body = parseErrorBody(reply.text)
+    const requestId = guid(reply.headers.get("request-id")) ?? body.requestId
+    const date = isoDate(reply.headers.get("date"))
+    const mayHaveSent = sends && statusMayHaveSent(reply.status)
+    throw new GraphHttpError(
+      this.redact(
+        `Graph ${operation} failed: HTTP ${reply.status}${body.detail ? ` ${body.detail}` : ""}${mayHaveSent ? this.sentHint(clientRequestId, requestId, date) : ""}`,
+      ),
+      operation,
+      reply.status,
+      parseRetryAfter(reply.headers.get("retry-after"), this.now()),
+      {
+        mayHaveSent,
+        clientRequestId,
+        requestId,
+        date,
+        traceId: body.traceId,
+        correlationId: body.correlationId,
+        code: body.code,
+      },
+    )
   }
 
   /**
@@ -898,7 +964,9 @@ export class GraphMailDriver implements MailDriver {
    * "%7E").
    */
   private redact(message: string): string {
-    let out = message.replace(
+    // One line first: the error's constructor joins lines, so a secret
+    // split across a line break must be matched joined, before that.
+    let out = oneLine(message).replace(
       /Bearer\s+[A-Za-z0-9._~+/=-]+/g,
       "Bearer [redacted]",
     )
@@ -916,26 +984,86 @@ export class GraphMailDriver implements MailDriver {
   }
 }
 
-/** Graph `{error:{code,message}}` or AAD `{error, error_description}`. */
-function errorDetail(text: string): string {
-  try {
-    const body = JSON.parse(text) as {
-      error?: string | { code?: string; message?: string }
-      error_description?: string
-    }
-    if (typeof body.error === "object" && body.error !== null) {
-      const message = body.error.message
-        ? `: ${body.error.message.slice(0, 200)}`
-        : ""
-      return `${body.error.code ?? "UnknownError"}${message}`
-    }
-    if (typeof body.error === "string") {
-      // AAD descriptions start with the AADSTS code; keep the first line.
-      const description = body.error_description?.split(/\r?\n/)[0] ?? ""
-      return `${body.error}${description ? `: ${description.slice(0, 200)}` : ""}`
-    }
-  } catch {
-    // Not JSON: fall through with no detail rather than echoing a body.
+/** What an error body says, reduced to what may be shown. */
+interface ErrorBody {
+  /** "Code: first line of the message", or "" when the body says nothing usable. */
+  detail: string
+  /** Graph's error code or Entra's `error`, when code-shaped. */
+  code?: string
+  /** Graph's innerError request-id, GUID-shaped only. */
+  requestId?: string
+  /** Entra's trace_id and correlation_id, GUID-shaped only. */
+  traceId?: string
+  correlationId?: string
+}
+
+/** The first line of `text`, at most 200 characters. */
+function firstLine(text: string): string {
+  return (text.split(/\r?\n/)[0] ?? "").slice(0, 200)
+}
+
+function codeOf(value: unknown): string | undefined {
+  return typeof value === "string" && /^[A-Za-z0-9_.]{1,64}$/.test(value)
+    ? value
+    : undefined
+}
+
+/**
+ * Graph `{error:{code,message,innerError}}` or Entra `{error,
+ * error_description, trace_id, correlation_id}`. Only the code, the first
+ * line of the message and GUID-shaped ids are kept; a body that is not
+ * JSON says nothing (it is never echoed).
+ */
+function parseErrorBody(text: string): ErrorBody {
+  let body: {
+    error?:
+      | string
+      | {
+          code?: string
+          message?: string
+          innerError?: Record<string, unknown>
+          innererror?: Record<string, unknown>
+        }
+    error_description?: string
+    trace_id?: unknown
+    correlation_id?: unknown
   }
-  return ""
+  try {
+    body = JSON.parse(text) as typeof body
+  } catch {
+    // Not JSON: no detail rather than echoing a body.
+    return { detail: "" }
+  }
+  if (typeof body?.error === "object" && body.error !== null) {
+    const inner = body.error.innerError ?? body.error.innererror
+    const message = body.error.message
+      ? `: ${firstLine(body.error.message)}`
+      : ""
+    const code = codeOf(body.error.code)
+    return {
+      detail: `${code ?? "UnknownError"}${message}`,
+      code,
+      requestId: guid(inner?.["request-id"]),
+    }
+  }
+  if (typeof body?.error === "string") {
+    // Entra descriptions start with the AADSTS code; keep the first line.
+    const description = body.error_description
+      ? firstLine(body.error_description)
+      : ""
+    const traceId = guid(body.trace_id)
+    const correlationId = guid(body.correlation_id)
+    const ids = [
+      traceId && `trace_id ${traceId}`,
+      correlationId && `correlation_id ${correlationId}`,
+    ].filter(Boolean)
+    const code = codeOf(body.error)
+    return {
+      detail: `${code ?? "UnknownError"}${description ? `: ${description}` : ""}${ids.length > 0 ? ` (${ids.join(", ")})` : ""}`,
+      code,
+      traceId,
+      correlationId,
+    }
+  }
+  return { detail: "" }
 }

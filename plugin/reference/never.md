@@ -35,7 +35,9 @@ docs may add to them, never relax them.
 - **Never retry a run, a stage, a sign-in or a mail send automatically.** A
   failed sign-in counts toward the app's lockout; a re-sent mail creates
   duplicate records. Re-run only when the user asks, and say first which
-  sign-ins and mails the re-run repeats.
+  sign-ins and mails the re-run repeats and, when a message says a mail may
+  have been sent, that the user first checked in the app whether it
+  arrived.
 - Never add `retries`, never pass a base URL the target allowlist does not
   list, never point a run at production, never set `FLOWREEL_TARGET` (or the
   project's alias) to `staging` unless the user asked for a staging run.

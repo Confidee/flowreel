@@ -6,6 +6,14 @@ import type { APIRequest, APIRequestContext } from "@playwright/test"
 
 import type { StorageState } from "../app/personas.js"
 import { LoginError } from "../core/errors.js"
+import {
+  type BoundTimers,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  type FetchLike,
+  assertRequestTimeoutMs,
+  fetchWithin,
+  formatBound,
+} from "../core/http.js"
 import { poll } from "../core/poll.js"
 import {
   addressOf,
@@ -29,6 +37,10 @@ import type {
 // with the seam flag set. Every POST carries a JSON body (`{}` when it has
 // no fields): the Rails kit's gate refuses any other POST, so a cross-site
 // page cannot post to a seam.
+//
+// Both HTTP clients bound every request as a whole (headers and body) by
+// requestTimeoutMs, 30 s by default: a seam that never answers fails the
+// run instead of hanging it.
 //
 // - seamSignIn(): POST <signIn> {email, …} -> 2xx + the session cookie.
 // - HttpSeamMailDriver: no real mail. Inbound goes through POST
@@ -80,12 +92,39 @@ function jsonBody(method: "GET" | "POST", json: unknown): unknown {
   return json === undefined && method === "POST" ? {} : json
 }
 
-/** SeamHttp over a Playwright APIRequestContext created with the baseURL. */
-export function seamHttpFromRequest(request: APIRequestContext): SeamHttp {
+export type { FetchLike }
+
+export interface SeamRequestOptions {
+  /**
+   * The longest one seam request may take, headers and body included.
+   * Default 30 000 ms. A whole number of milliseconds from 1 to
+   * 2 147 483 647; anything else is a ConfigError. Raise it when a job
+   * drain (POST <performEnqueuedJobs>) legitimately takes longer.
+   */
+  requestTimeoutMs?: number
+}
+
+/**
+ * SeamHttp over a Playwright APIRequestContext created with the baseURL.
+ * Every call passes Playwright's own per-call `timeout` (requestTimeoutMs,
+ * 30 s by default), which covers the body too: inside @playwright/test a
+ * request context has no timeout of its own unless the project sets
+ * `actionTimeout`. A timeout rejects with Playwright's error.
+ *
+ * Throws a ConfigError for a bad requestTimeoutMs (the message names the
+ * option, never its value). Makes no request until called.
+ */
+export function seamHttpFromRequest(
+  request: APIRequestContext,
+  options: SeamRequestOptions = {},
+): SeamHttp {
+  const timeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  assertRequestTimeoutMs(timeout, "seamHttpFromRequest option requestTimeoutMs")
   return async (method, path, json) => {
     const body = jsonBody(method, json)
     const response = await request.fetch(path, {
       method,
+      timeout,
       ...(body === undefined
         ? {}
         : { data: body, headers: { "Content-Type": "application/json" } }),
@@ -94,25 +133,68 @@ export function seamHttpFromRequest(request: APIRequestContext): SeamHttp {
   }
 }
 
-/** SeamHttp over fetch (global by default) against `baseURL`. */
+/** The options of seamHttpFromFetch. */
+export interface SeamFetchOptions extends SeamRequestOptions, BoundTimers {
+  /** Default: the global fetch. */
+  fetch?: FetchLike
+}
+
+/**
+ * SeamHttp over fetch (global by default) against `baseURL`. The second
+ * argument is either the fetch to use (the original form) or
+ * SeamFetchOptions.
+ *
+ * Every request gets one AbortController and one unref'd timer of
+ * requestTimeoutMs (30 s by default) over the headers and the whole body,
+ * cleared however it ends. At the bound the request is aborted and the
+ * call rejects with a plain Error naming the method, the path (without its
+ * query) and the bound, never the body. Any other failure is passed on as
+ * is; a non-2xx whose body cannot be read comes back with a null body.
+ * Never retried.
+ *
+ * Throws a ConfigError for a bad requestTimeoutMs (the message names the
+ * option, never its value). Makes no request until called.
+ */
 export function seamHttpFromFetch(
   baseURL: string,
-  fetchImpl: (input: string, init?: RequestInit) => Promise<Response> = (
-    input,
-    init,
-  ) => fetch(input, init),
+  fetchOrOptions: FetchLike | SeamFetchOptions = {},
 ): SeamHttp {
+  const options: SeamFetchOptions =
+    typeof fetchOrOptions === "function"
+      ? { fetch: fetchOrOptions }
+      : fetchOrOptions
+  const ms = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  assertRequestTimeoutMs(ms, "seamHttpFromFetch option requestTimeoutMs")
+  const fetchImpl: FetchLike =
+    options.fetch ?? ((input, init) => fetch(input, init))
+  const timers: BoundTimers = {
+    setTimeout: options.setTimeout,
+    clearTimeout: options.clearTimeout,
+  }
   return async (method, path, json) => {
     const body = jsonBody(method, json)
-    const response = await fetchImpl(new URL(path, baseURL).toString(), {
-      method,
-      headers:
-        body === undefined
-          ? { Accept: "application/json" }
-          : { Accept: "application/json", "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-    return { status: response.status, body: parseBody(await response.text()) }
+    const timeout = new Error(
+      `Seam ${method} ${path.split("?")[0]} got no answer within ${formatBound(ms)}; raise requestTimeoutMs if a job drain legitimately takes longer`,
+    )
+    const reply = await fetchWithin(
+      fetchImpl,
+      new URL(path, baseURL).toString(),
+      {
+        method,
+        headers:
+          body === undefined
+            ? { Accept: "application/json" }
+            : {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      ms,
+      timeout,
+      timers,
+    )
+    return { status: reply.status, body: parseBody(reply.text) }
   }
 }
 
