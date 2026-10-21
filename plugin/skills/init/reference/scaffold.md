@@ -36,6 +36,7 @@ against the runtime as shipped.
 | `e2e/flowreel/env.example`                                                   | same                             | the shape of the staging secrets (never real values)                           |           |
 | `e2e/flowreel/unit.config.ts`, `unit/narration-keys.ts`                      | same                             | the browser-free unit suite (`npm run flowreel:unit`) and its helper           |           |
 | `e2e/flowreel/unit/narration.spec.ts`                                        | same                             | the round trip's narration keys against its step titles                        |           |
+| `e2e/flowreel/unit/adapter.spec.ts`                                          | same                             | the adapter's requests are bounded and never pass a call log on                |           |
 | `e2e/flowreel/unit/tour.spec.ts`                                             | same                             | CATALOGUE.md against `TOUR_CATALOGUE`; each area's narration keys              | yes       |
 | `e2e/flowreel/tour.ts`                                                       | same                             | tour manifest, catalogue mirror, `feature()`, the tour's `test`, `areaText()`  | yes       |
 | `e2e/flowreel/CATALOGUE.md`                                                  | same                             | the feature catalogue (owner-approved policies)                                | yes       |

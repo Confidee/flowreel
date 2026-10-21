@@ -15,7 +15,7 @@ import {
   requireKeys,
   resolveBaseUrl,
 } from "@confidee/flowreel/config"
-import { type Env, LoginError } from "@confidee/flowreel/core"
+import { type Env, LoginError, requestFailure } from "@confidee/flowreel/core"
 import type {
   APIRequest,
   APIRequestContext,
@@ -104,11 +104,19 @@ export function describeRun(run: NotesRun) {
 // The AppAdapter
 // ---------------------------------------------------------------------------
 
+/**
+ * How long any request here may take, from the connection to the last
+ * byte of the body: explicit, rather than Playwright's default, which
+ * differs between global setup and a test.
+ */
+const REQUEST_TIMEOUT_MS = 30_000
+
 /** How a Notes session is probed and revoked. */
 export const NOTES_SESSION: SessionProtocol = {
   probePath: "/notes",
   isSignInPath: (path) => path === "/sign-in",
   signOut: { method: "DELETE", path: "/session" },
+  requestTimeoutMs: REQUEST_TIMEOUT_MS,
 }
 
 /**
@@ -122,13 +130,20 @@ async function formSignIn(
   key: PersonaKey,
   persona: Persona,
 ): Promise<StorageState> {
-  const context = await api.newContext({ baseURL })
+  const context = await api.newContext({ baseURL, timeout: REQUEST_TIMEOUT_MS })
   try {
-    const response = await context.post("/session", {
-      form: { email: persona.email, password: persona.password },
-      maxRedirects: 0,
-      failOnStatusCode: false,
-    })
+    const response = await context
+      .post("/session", {
+        form: { email: persona.email, password: persona.password },
+        maxRedirects: 0,
+        failOnStatusCode: false,
+      })
+      .catch((error: unknown) => {
+        // Its first line only: the call log can quote the session cookie.
+        throw new LoginError(
+          `Sign-in as the ${key} persona (${persona.email}) failed: ${requestFailure(error)}`,
+        )
+      })
     const location = response.headers().location ?? ""
     if (response.status() !== 303 || !location.endsWith("/notes")) {
       throw new LoginError(
@@ -156,10 +171,15 @@ export const notesApp: AppAdapter<PersonaKey> = {
   isSignedOut: signedOutBy("/sign-in"),
   keepalivePath: "/api/me",
   async health(api, baseURL) {
-    const context = await api.newContext({ baseURL })
+    const context = await api.newContext({
+      baseURL,
+      timeout: REQUEST_TIMEOUT_MS,
+    })
     try {
       const response = await context.get("/up")
       return response.ok() ? null : `GET /up returned HTTP ${response.status()}`
+    } catch (error) {
+      return `GET /up failed: ${requestFailure(error)}`
     } finally {
       await context.dispose()
     }

@@ -123,6 +123,33 @@ read is re-polled until the wait's own timeout, which then reports
 `Graph token request got no answer within …, retrying`). Raise
 `requestTimeoutMs` only when answers are slow rather than missing.
 
+**`Timed out … Last observed: Graph read failed (ECONNRESET), 3 in a row, no mailbox read completed in this wait, retrying`**
+(or `Graph token request failed (ECONNRESET), … in a row`)
+The network between this machine and Microsoft kept dropping the
+connection for the whole wait: a reset, a closed connection, a transient
+DNS answer or one of undici's timeouts, named by its code. This is the
+network, not the app and not the credentials. Inside a `waitFor` the
+driver re-polls such a failure after a back-off of 5 s, 10 s, 20 s … up
+to 60 s, plus the wait's own poll interval, so a
+blip recovers on its own; a wait that still timed out saw it on every
+attempt. `no mailbox read completed in this wait` means the list was never
+read at all. Check the network path (proxy, firewall, VPN, DNS) and
+Microsoft 365's service health. The same code on the driver's **first**
+request ends the wait at once instead (`GraphTransportError`): flowreel
+retries only an endpoint that has answered it before, so a firewall that
+resets every connection fails fast.
+
+**`Test sign-in (POST /test/sign_in_as) failed: apiRequestContext.post: Timeout 30000ms exceeded.`**
+(or `Session probe GET / failed: …`)
+The sign-in seam, or the page a session check probes, did not answer
+within `requestTimeoutMs` (30 s by default), or the connection failed (the
+first line says which). Is the development server running, on the base URL
+the message's target uses, and not stuck in a migration or a debugger?
+Raise `requestTimeoutMs` (on `seamSignIn`'s options or the
+`SessionProtocol`) only when the app is slow rather than silent. The
+message keeps only the first line of Playwright's error on purpose: the
+rest, its call log, names the session cookie.
+
 **`Graph mailbox health check failed … Could not connect, which is a network problem, not a credentials one …`**
 The health check's request failed before it reached Microsoft: DNS, the
 connection or TLS (`ECONNREFUSED`, `ENOTFOUND`, a certificate error, often

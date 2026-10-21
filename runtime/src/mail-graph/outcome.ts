@@ -4,15 +4,16 @@ import {
   GraphHttpError,
   GraphRequestError,
   GraphRequestTimeoutError,
+  GraphTransportError,
 } from "./errors.js"
 
 // What a failed Graph request means: whether a send may have gone out
-// (#17) and which failures waitFor may re-poll (#18). Pure functions,
-// internal to the mail-graph adapter (not exported from its entry point).
+// (#17) and which failures waitFor may re-poll (#18, #23). Internal to the
+// mail-graph adapter (not exported from its entry point).
 //
-// The tripwire: both transient classifiers return false first thing for an
-// error that may have sent mail, so a send can never be retried through
-// waitFor's re-poll, whatever its status.
+// The tripwire: every transient classifier returns false first thing for
+// an error that may have sent mail, so a send can never be retried through
+// waitFor's re-poll, whatever its status or code.
 
 /** The operation name of the shared token request. */
 export const TOKEN_OPERATION = "token request"
@@ -27,6 +28,30 @@ const TRANSIENT_TOKEN_ERROR = "temporarily_unavailable"
 /** The first token back-off without Retry-After; it doubles from there. */
 const MIN_TOKEN_BACKOFF_MS = 5_000
 const MAX_TOKEN_BACKOFF_MS = 60_000
+
+/**
+ * Temporary network failures a waitFor read or token request may re-poll
+ * (#23): a reset or closed connection, a broken pipe, a timeout, a
+ * transient DNS answer. An allowlist: a code not named here, or none, is
+ * fatal, so a configuration fault (ENOTFOUND, ECONNREFUSED, TLS) or a
+ * project's broken fetch fails fast.
+ */
+const TRANSIENT_TRANSPORT_CODES = new Set([
+  "ECONNRESET",
+  "UND_ERR_SOCKET",
+  "EPIPE",
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+])
+/**
+ * Transport errors whose cause was an AggregateError with an inner error
+ * the allowlist does not name: never transient, whatever their own code.
+ */
+const UNLISTED_INNER = new WeakSet<GraphTransportError>()
 
 /** Phases in which nothing of the request was written. */
 const PRE_SEND_SYSCALLS = new Set(["getaddrinfo", "connect"])
@@ -59,6 +84,11 @@ const CODE_SHAPE = /^[A-Za-z0-9_]{1,64}$/
 
 function mayHaveSent(error: unknown): boolean {
   return error instanceof GraphRequestError && error.mayHaveSent
+}
+
+/** A GET: a read. Every waitFor request but the token's is one. */
+function isRead(operation: string): boolean {
+  return operation.startsWith("GET ")
 }
 
 /**
@@ -132,10 +162,53 @@ export function transportCode(error: unknown): string | undefined {
 }
 
 /**
- * True for a waitFor read that may be polled again: a Graph read's 429,
- * 503 or 504, or a Graph read that got no answer. Never a token request
- * (isTransientToken decides those), and never anything that may have sent
- * mail.
+ * Records what `transport` cannot show: whether its cause (`raw`, fetch's
+ * error) was an AggregateError with an inner error whose code the
+ * allowlist does not name. Called once, where the error is made.
+ */
+export function noteTransportCause(
+  transport: GraphTransportError,
+  raw: unknown,
+): void {
+  const errors = (subjectOf(raw) as { errors?: unknown } | null | undefined)
+    ?.errors
+  if (
+    Array.isArray(errors) &&
+    !errors.every((inner) =>
+      TRANSIENT_TRANSPORT_CODES.has(
+        String((inner as { code?: unknown })?.code),
+      ),
+    )
+  ) {
+    UNLISTED_INNER.add(transport)
+  }
+}
+
+/**
+ * True for a transport error waitFor may re-poll (#23): a GET read or the
+ * token request whose code is on the allowlist (and, for an AggregateError,
+ * every inner one). Never a write, never an unknown or missing code, and
+ * never anything that may have sent mail. Whether the endpoint ever
+ * answered (first contact fails fast) is waitFor's to decide.
+ */
+export function isTransientTransport(
+  error: unknown,
+): error is GraphTransportError {
+  if (mayHaveSent(error)) return false
+  return (
+    error instanceof GraphTransportError &&
+    (error.operation === TOKEN_OPERATION || isRead(error.operation)) &&
+    error.code !== undefined &&
+    TRANSIENT_TRANSPORT_CODES.has(error.code) &&
+    !UNLISTED_INNER.has(error)
+  )
+}
+
+/**
+ * True for a waitFor read that may be polled again: a Graph GET's 429,
+ * 503 or 504, or a Graph GET that got no answer. Never a token request
+ * (isTransientToken decides those), never a write, and never anything that
+ * may have sent mail.
  */
 export function isTransientRead(
   error: unknown,
@@ -146,7 +219,7 @@ export function isTransientRead(
       error instanceof GraphHttpError ||
       error instanceof GraphRequestTimeoutError
     ) ||
-    error.operation === TOKEN_OPERATION
+    !isRead(error.operation)
   ) {
     return false
   }
@@ -160,8 +233,8 @@ export function isTransientRead(
  * True for a token request waitFor may try again: HTTP 429, 500, 502, 503
  * or 504, an OAuth `error` of temporarily_unavailable at any status, or no
  * answer. Never keyed on error_description. A bad secret, tenant or
- * consent (400, 401 otherwise) and a transport error are not transient,
- * and neither is anything that may have sent mail.
+ * consent (400, 401 otherwise) is not transient, and neither is anything
+ * that may have sent mail. A transport error is isTransientTransport's.
  */
 export function isTransientToken(
   error: unknown,
@@ -179,7 +252,8 @@ export function isTransientToken(
 }
 
 /**
- * How long to wait before the next token attempt: Retry-After exactly when
+ * How long to wait before the next token attempt, or the next read after a
+ * transient transport error (no Retry-After then): Retry-After exactly when
  * the response sent one, else 5 s doubling with each consecutive failure
  * (`attempt` 1, 2, 3 …) up to 60 s; never more than `leftMs`, never less
  * than 0.

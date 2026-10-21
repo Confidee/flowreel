@@ -42,6 +42,8 @@ export interface FetchWithinOptions extends BoundTimers {
    * status alone is the answer.
    */
   readBody?: (response: Response) => boolean
+  /** Called once the status line arrived, before the body is read. */
+  onResponse?: (response: Response) => void
 }
 
 /**
@@ -63,6 +65,36 @@ export function assertRequestTimeoutMs(
       `${optionName} must be a whole number of milliseconds from 1 to ${MAX_TIMER_MS}.`,
     )
   }
+}
+
+/** A URL's query string or fragment: a reset or sign-in token can live there. */
+const URL_QUERY = /(\bhttps?:\/\/[^\s?#"'<>]*)[?#][^\s"'<>]*/gi
+
+/** `text` with every http(s) URL's query string and fragment removed. */
+export function withoutUrlQueries(text: string): string {
+  return text.replace(URL_QUERY, "$1")
+}
+
+/**
+ * `text` up to Playwright's "Call log:" line: the log below it names the
+ * full URL, every request header (a session cookie, a CSRF token) and a
+ * response's set-cookie (#26).
+ */
+export function withoutCallLog(text: string): string {
+  const at = text.search(/^\s*Call log:/m)
+  return at === -1 ? text : text.slice(0, at).trimEnd()
+}
+
+/**
+ * What may be said of a failed Playwright request: the first line of its
+ * message, without a URL query, at most 300 characters. Never its call
+ * log, its stack or its cause. Rethrow it in a new error with no cause.
+ */
+export function requestFailure(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message : String(error ?? "unknown error")
+  const first = withoutCallLog(message).split(/\r?\n/)[0]?.trim() ?? ""
+  return withoutUrlQueries(first).slice(0, 300) || "request failed"
 }
 
 /** "30 s" for whole seconds, else "300 ms". */
@@ -120,6 +152,7 @@ export async function fetchWithin(
       fetchImpl(url, { ...init, signal: controller.signal }),
       expired,
     ])
+    options.onResponse?.(response)
     if (options.readBody && !options.readBody(response)) {
       try {
         response.body?.cancel().catch(() => {})

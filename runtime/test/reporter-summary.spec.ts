@@ -8,9 +8,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs"
+import http from "node:http"
+import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import { join, relative } from "node:path"
 
+import type { APIRequest } from "@playwright/test"
 import { expect, test } from "@playwright/test"
 import type {
   FullResult,
@@ -852,6 +855,147 @@ test.describe("the tour", () => {
         produced: false,
         reason: "no tour video composer configured",
       })
+    } finally {
+      rmSync(h.root, { recursive: true, force: true })
+    }
+  })
+})
+
+test.describe("#26: a Playwright call log never reaches the summary", () => {
+  const COOKIE = "SESSION-COOKIE-SECRET-1a2b"
+  const FRESH = "FRESH-SESSION-COOKIE-3c4d"
+
+  /**
+   * A real Playwright request error: a context holding a session cookie
+   * POSTs to a server that sets a fresh one, then never ends the body.
+   */
+  async function realRequestError(playwright: {
+    request: APIRequest
+  }): Promise<string> {
+    const server = http.createServer((req, res) => {
+      req.resume()
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Set-Cookie": `_app_session=${FRESH}; Path=/; HttpOnly`,
+      })
+      res.write('{"ok":')
+    })
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const port = (server.address() as AddressInfo).port
+    const context = await playwright.request.newContext({
+      baseURL: `http://127.0.0.1:${port}`,
+      storageState: {
+        cookies: [
+          {
+            name: "_app_session",
+            value: COOKIE,
+            domain: "127.0.0.1",
+            path: "/",
+            expires: -1,
+            httpOnly: true,
+            secure: false,
+            sameSite: "Lax",
+          },
+        ],
+        origins: [],
+      },
+    })
+    try {
+      await context.post("/test/sign_in_as?token=QUERY-SECRET", {
+        data: { email: "a@x" },
+        headers: { "X-CSRF-Token": "CSRF-SECRET" },
+        timeout: 300,
+      })
+      throw new Error("the request did not fail")
+    } catch (error) {
+      return (error as Error).message
+    } finally {
+      await context.dispose()
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  }
+
+  const SECRETS = [COOKIE, FRESH, "QUERY-SECRET", "CSRF-SECRET", "Call log"]
+
+  test("summary.md, summary.json and summary.lines keep the first line, never the call log", async ({
+    playwright,
+  }) => {
+    const message = await realRequestError(playwright)
+    // The premise: Playwright's own message carries every one of them.
+    for (const secret of SECRETS) expect(message, secret).toContain(secret)
+    const h = harness()
+    try {
+      h.reporter.onTestEnd(
+        testCase("orders", "round trip"),
+        result(
+          "failed",
+          [
+            step("S1 send", {
+              error: {
+                message,
+                location: { file: SPEC_FILE, line: 33, column: 5 },
+              },
+            }),
+          ],
+          { error: { message } },
+        ),
+      )
+      h.reporter.onError({ message: `\u001b[2m${message}\u001b[22m` })
+      await h.reporter.onEnd(failed)
+      const written = ["summary.md", "summary.json", "summary.lines"].map(
+        (file) => [file, readFileSync(join(h.dir, file), "utf8")] as const,
+      )
+      for (const [file, text] of written) {
+        expect(text, file).toContain("Timeout 300ms exceeded")
+        for (const secret of SECRETS) {
+          expect(text, `${file}: ${secret}`).not.toContain(secret)
+        }
+      }
+      for (const line of h.lines) {
+        for (const secret of SECRETS) expect(line, secret).not.toContain(secret)
+      }
+    } finally {
+      rmSync(h.root, { recursive: true, force: true })
+    }
+  })
+
+  test("a URL's query string and fragment are dropped from what is kept", async () => {
+    const h = harness()
+    try {
+      h.reporter.onTestEnd(
+        testCase("orders", "round trip"),
+        result("failed", [], {
+          error: {
+            message:
+              "page.goto: net::ERR_CONNECTION_REFUSED at https://app.example.test/reset?token=RESET-SECRET#frag-SECRET\nexpected the page to load (see http://h/x?a=QUERY-2)",
+          },
+        }),
+      )
+      await h.reporter.onEnd(failed)
+      const s = readFileSync(join(h.dir, "summary.json"), "utf8")
+      expect(s).toContain("https://app.example.test/reset")
+      expect(s).toContain("http://h/x")
+      for (const secret of ["RESET-SECRET", "frag-SECRET", "QUERY-2"]) {
+        expect(s, secret).not.toContain(secret)
+      }
+    } finally {
+      rmSync(h.root, { recursive: true, force: true })
+    }
+  })
+
+  test("an error without a call log is kept whole (up to 4000 characters)", async () => {
+    const h = harness()
+    try {
+      const message = "expected 1\nreceived 2\n  at flows/x.spec.ts:33"
+      h.reporter.onTestEnd(
+        testCase("orders", "round trip"),
+        result("failed", [], { error: { message } }),
+      )
+      await h.reporter.onEnd(failed)
+      expect(readFileSync(join(h.dir, "summary.json"), "utf8")).toContain(
+        JSON.stringify(message).slice(1, -1),
+      )
     } finally {
       rmSync(h.root, { recursive: true, force: true })
     }

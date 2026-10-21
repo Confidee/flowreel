@@ -49,6 +49,7 @@ const SURFACE: Record<string, string[]> = {
     "poll",
     "recentSends",
     "registerEnvAliases",
+    "requestFailure",
     "summarizeUndo",
     "undoMarkdown",
     "unresolved",

@@ -13,6 +13,7 @@ import {
   assertRequestTimeoutMs,
   fetchWithin,
   formatBound,
+  requestFailure,
 } from "../core/http.js"
 import { poll } from "../core/poll.js"
 import {
@@ -38,9 +39,9 @@ import type {
 // no fields): the Rails kit's gate refuses any other POST, so a cross-site
 // page cannot post to a seam.
 //
-// Both HTTP clients bound every request as a whole (headers and body) by
-// requestTimeoutMs, 30 s by default: a seam that never answers fails the
-// run instead of hanging it.
+// Both HTTP clients and seamSignIn bound every request as a whole (headers
+// and body) by requestTimeoutMs, 30 s by default: a seam that never
+// answers fails the run instead of hanging it.
 //
 // - seamSignIn(): POST <signIn> {email, …} -> 2xx + the session cookie.
 // - HttpSeamMailDriver: no real mail. Inbound goes through POST
@@ -214,12 +215,22 @@ export interface SeamSignInOptions {
   accept?: (status: number) => boolean
   /** The LoginError text for a refused sign-in (never a password). */
   failure?: (status: number) => string
+  /**
+   * How long the sign-in may take, from the connection to the last byte of
+   * the body, in milliseconds. Default 30 000. A whole number from 1 to
+   * 2 147 483 647, else a ConfigError. It overrides the project's
+   * actionTimeout for this request.
+   */
+  requestTimeoutMs?: number
 }
 
 /**
  * Signs in through the sign-in seam in a fresh request context and returns
  * its storageState. Called once per persona by the AppAdapter; never
- * retried: any other status is a LoginError.
+ * retried: any other status is a LoginError. A request that fails (no
+ * answer within requestTimeoutMs, a refused connection) throws an Error
+ * naming the seam and the first line of Playwright's message only: its
+ * call log can carry the session cookie the seam just set.
  */
 export async function seamSignIn(
   api: APIRequest,
@@ -228,9 +239,20 @@ export async function seamSignIn(
 ): Promise<StorageState> {
   const path = options.path ?? DEFAULT_SEAM_PATHS.signIn
   const accept = options.accept ?? ((s: number) => s >= 200 && s < 300)
-  const context = await api.newContext({ baseURL })
+  const timeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  assertRequestTimeoutMs(timeout, "seamSignIn option requestTimeoutMs")
+  const context = await api.newContext({ baseURL, timeout })
   try {
-    const response = await context.post(path, { data: options.body })
+    let response: Awaited<ReturnType<typeof context.post>>
+    try {
+      response = await context.post(path, { data: options.body })
+    } catch (error) {
+      // No cause: the original's message and stack hold the call log.
+      // eslint-disable-next-line preserve-caught-error
+      throw new Error(
+        `Test sign-in (POST ${path.split("?")[0]}) failed: ${requestFailure(error)}`,
+      )
+    }
     if (!accept(response.status())) {
       throw new LoginError(
         options.failure?.(response.status()) ??

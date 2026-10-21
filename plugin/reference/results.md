@@ -32,7 +32,7 @@ pipeline's own `pipeline.md`.
 ```
 <results>/<PIPELINE_ID>/pipeline.md, pipeline.json, <module>-<PIPELINE_ID>.mp4
 <results>/<RUN_ID>/            one per stage that ran (loc-… development, stg-… staging)
-    summary.md                 for people: the only file that may leave the machine
+    summary.md                 for people: the only file that may leave the machine (errors without Playwright's call log)
     summary.json               for tools (below)
     summary.lines              <file>:<line>: error: [<step>] <message>
     undo.json, undo.md         the undo ledger (tours that changed shared config)
@@ -142,3 +142,14 @@ Common messages:
   Quote the `client-request-id` (and `request-id` and `date`, when named)
   for Microsoft support. Never propose re-sending the mail, by hand or by
   re-running, before that check.
+- `Last observed: Graph read failed (<CODE>), N in a row …` (or
+  `Graph token request failed (<CODE>) …`): the network kept dropping the
+  connection to Microsoft for the whole wait (environment / config, not
+  the app). The driver already re-polled it; never propose a longer
+  `timeoutMs` as the fix. The user checks the network path and Microsoft
+  365's service health.
+- `Test sign-in (POST …) failed: …` / `Session probe GET … failed: …`:
+  the app did not answer within `requestTimeoutMs` or refused the
+  connection (environment). Is the server up on that base URL? The
+  message is the first line of Playwright's error on purpose; never ask
+  for the call log, which names the session cookie.

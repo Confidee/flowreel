@@ -602,7 +602,11 @@ test.describe("the sign-out safety net", () => {
         }),
       )
       const state = runLifecycle()
-      state.signOut = () => Promise.reject(new Error("HTTP 500"))
+      // #26: the warning keeps the first line, never a call log.
+      state.signOut = () =>
+        Promise.reject(
+          new Error("HTTP 500\nCall log:\n  - cookie: s=COOKIE-SECRET"),
+        )
       failedRun(h)
       // A Ctrl-C during the wait ends it at once.
       setTimeout(() => process.emit("SIGINT", "SIGINT"), 50)
@@ -613,6 +617,7 @@ test.describe("the sign-out safety net", () => {
       expect(h.lines).toContain(
         "[ex] WARNING: the sign-out failed (HTTP 500): sign the personas out on staging (or wait for the session idle timeout) before sharing anything but summary.md.",
       )
+      expect(h.lines.join("\n")).not.toContain("COOKIE-SECRET")
       expect(state.signedOut).toBe(false)
       const text = harness()
       try {

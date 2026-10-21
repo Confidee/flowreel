@@ -28,6 +28,11 @@ import {
   stageDeadlineAt,
 } from "../core/deadline.js"
 import { envValue } from "../core/env.js"
+import {
+  requestFailure,
+  withoutCallLog,
+  withoutUrlQueries,
+} from "../core/http.js"
 import { isPassive, markPassive } from "../core/passive.js"
 import {
   UNDO_JSON,
@@ -210,9 +215,20 @@ function firstLine(message: string): string {
   return message.split("\n").find((l) => l.trim() !== "") ?? message
 }
 
+/**
+ * What summary.md, summary.json and summary.lines may say of an error: its
+ * text up to Playwright's "Call log:" (which names the full URL, every
+ * request header, a session cookie included, and a response's set-cookie:
+ * #26), without any URL's query string, at most 4000 characters. The HTML
+ * report keeps the whole error.
+ */
 function errorText(error: TestError | undefined): string | null {
   if (!error) return null
-  return clean(error.message ?? error.value).slice(0, 4000) || "error"
+  return (
+    withoutUrlQueries(withoutCallLog(clean(error.message ?? error.value)))
+      .trim()
+      .slice(0, 4000) || "error"
+  )
 }
 
 function annotationsOf(test: TestCase, result: TestResult) {
@@ -818,7 +834,7 @@ export class SummaryReporter implements Reporter {
       state.signedOut = true
     } catch (error) {
       this.log(
-        `${prefix} WARNING: the sign-out failed (${error instanceof Error ? error.message : String(error)}): ${shareWarning}`,
+        `${prefix} WARNING: the sign-out failed (${requestFailure(error)}): ${shareWarning}`,
       )
     }
   }

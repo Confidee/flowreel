@@ -335,6 +335,56 @@ test.describe("signOutAll defaults", () => {
   })
 })
 
+test.describe("signOutAll: a signOut that throws (review of #24)", () => {
+  test("warns for that persona and still signs the others out", async () => {
+    const env = {
+      FLOWREEL_STATE_AGENT: JSON.stringify({
+        cookies: [],
+        origins: [{ origin: "a", localStorage: [] }],
+      }),
+      FLOWREEL_STATE_ADMIN: JSON.stringify({
+        cookies: [],
+        origins: [{ origin: "b", localStorage: [] }],
+      }),
+    }
+    const log: string[] = []
+    const warn: string[] = []
+    const results = await signOutAll(
+      { target: "staging", baseURL: "http://h", keys: ["agent", "admin"] },
+      {
+        signOut: (_api, _url, state) => {
+          if (state.origins[0].origin === "a") {
+            // An adapter that breaks the contract, call log and all.
+            throw new Error(
+              "apiRequestContext.post: read ECONNRESET\nCall log:\n  - cookie: s=COOKIE-SECRET",
+            )
+          }
+          return Promise.resolve({ revoked: true, detail: "POST /x -> 204" })
+        },
+      },
+      {
+        api: {} as APIRequest,
+        env,
+        log: (line) => log.push(line),
+        warn: (line) => warn.push(line),
+      },
+    )
+    expect(results.map((r) => [r.persona, r.revoked])).toEqual([
+      ["agent", false],
+      ["admin", true],
+    ])
+    expect(log).toEqual([
+      "[flowreel] signed out the admin persona (POST /x -> 204).",
+    ])
+    expect(warn).toHaveLength(1)
+    expect(warn[0]).toContain(
+      "WARNING: could not sign out the agent persona (signOut threw: apiRequestContext.post: read ECONNRESET)",
+    )
+    expect(warn.join("\n")).not.toContain("COOKIE-SECRET")
+    expect(warn.join("\n")).not.toContain("Call log")
+  })
+})
+
 test.describe("refuseRepeats", () => {
   test("accepts no config and clean projects; names an unnamed project", () => {
     expect(() => refuseRepeats(undefined)).not.toThrow()
