@@ -21,11 +21,16 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-prereqs.sh" --report
 ```
 
 It only reads (versions, the project's `"type"`, the Playwright download
-cache, `ffmpeg -encoders`, `say -v '?'`), never installs and always exits 0. The project is `$CLAUDE_PROJECT_DIR`. Each line is `ok`, `missing`
+cache, `ffmpeg -encoders`, `say -v '?'`, and, with grep, whether
+`e2e/flowreel/adapter.ts` sets a request timeout), never installs and
+always exits 0. The project is `$CLAUDE_PROJECT_DIR`. Each line is `ok`, `missing`
 (required: Node.js, `@playwright/test`, Chromium), `video-only` (ffmpeg,
 ffprobe: only the MP4s need them), `voice-only` (`say`, a Premium voice:
-only the narration), `optional` or `unchecked`. A `note:` line explains
-the item above it. The last line counts the missing required items out of
+only the narration), `optional`, `unchecked` or `advice` (an adapter
+scaffolded before 0.4.0 opens request contexts without a timeout: say
+what the 0.4.0 template adds, `REQUEST_TIMEOUT_MS` on every
+`api.newContext` and on `SESSION`; the doctor never edits a project
+file). A `note:` line explains the item above it. The last line counts the missing required items out of
 three, and any unchecked ones.
 
 `unchecked` means the tool resolves to a version manager's shim (Volta,

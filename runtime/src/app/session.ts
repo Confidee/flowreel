@@ -2,6 +2,12 @@
 
 import type { APIRequest } from "@playwright/test"
 
+import { ConfigError } from "../core/errors.js"
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  assertRequestTimeoutMs,
+  requestFailure,
+} from "../core/http.js"
 import type { StorageState } from "./personas.js"
 
 // Session protocol helpers: is a stored session still signed in, and
@@ -30,6 +36,20 @@ export interface SessionProtocol {
    * the sign-out request (omit when the app needs none).
    */
   csrf?: { cookie: string; header: string }
+  /**
+   * How long each probe and the sign-out may take, from the connection to
+   * the last byte of the body, in milliseconds. Default 30 000. A whole
+   * number from 1 to 2 147 483 647, else a ConfigError. It overrides the
+   * project's actionTimeout for these requests.
+   */
+  requestTimeoutMs?: number
+}
+
+/** The protocol's request bound, validated (a ConfigError naming the option). */
+function boundOf(protocol: SessionProtocol): number {
+  const ms = protocol.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  assertRequestTimeoutMs(ms, "SessionProtocol requestTimeoutMs")
+  return ms
 }
 
 /** Path only: never echo a query string (a reset token could live there). */
@@ -59,20 +79,37 @@ export function signedOutBy(
   }
 }
 
-/** True when the probe with this state is bounced to the sign-in page. */
+/**
+ * True when the probe with this state is bounced to the sign-in page. A
+ * probe that fails (no answer within requestTimeoutMs, a refused
+ * connection) throws an Error naming the probe and the first line of
+ * Playwright's message only: its call log carries the session cookie.
+ */
 export async function isSessionSignedOut(
   api: APIRequest,
   baseURL: string,
   state: StorageState,
   protocol: SessionProtocol,
 ): Promise<boolean> {
+  const timeout = boundOf(protocol)
+  const probePath = protocol.probePath ?? "/"
   const context = await api.newContext({
     baseURL,
     storageState: state,
     maxRedirects: 0,
+    timeout,
   })
   try {
-    const response = await context.get(protocol.probePath ?? "/")
+    let response: Awaited<ReturnType<typeof context.get>>
+    try {
+      response = await context.get(probePath)
+    } catch (error) {
+      // No cause: the original's message and stack hold the call log.
+      // eslint-disable-next-line preserve-caught-error
+      throw new Error(
+        `Session probe GET ${probePath.split("?")[0]} failed: ${requestFailure(error)}`,
+      )
+    }
     const location = response.headers().location ?? ""
     return (
       response.status() >= 300 &&
@@ -87,8 +124,9 @@ export async function isSessionSignedOut(
 /**
  * Revokes a persona's session: sign-out request (CSRF from the cookie a
  * probe GET refreshes), then a fresh context with the ORIGINAL state proves
- * the session is dead. Never throws; the detail names the HTTP status, never
- * a cookie.
+ * the session is dead. Never throws: a failure is revoked: false, whose
+ * detail names the HTTP status, the error's class or, for a bad
+ * requestTimeoutMs, the option; never a cookie.
  */
 export async function revokeSession(
   api: APIRequest,
@@ -98,6 +136,9 @@ export async function revokeSession(
 ): Promise<{ revoked: boolean; detail: string }> {
   const { method, path } = protocol.signOut
   try {
+    // A bad requestTimeoutMs ends here too: teardown must go on to the
+    // next persona, and its revoked: false is the loud warning.
+    const timeout = boundOf(protocol)
     if (await isSessionSignedOut(api, baseURL, state, protocol)) {
       return { revoked: true, detail: "already signed out" }
     }
@@ -105,6 +146,7 @@ export async function revokeSession(
       baseURL,
       storageState: state,
       maxRedirects: 0,
+      timeout,
     })
     let status: number
     try {
@@ -132,6 +174,12 @@ export async function revokeSession(
           detail: `${method} ${path} -> ${status}, session still valid`,
         }
   } catch (error) {
-    return { revoked: false, detail: (error as Error).name }
+    // A ConfigError names the option, never a value; anything else only
+    // by its class (a Playwright message carries the session cookie).
+    return {
+      revoked: false,
+      detail:
+        error instanceof ConfigError ? error.message : (error as Error).name,
+    }
   }
 }

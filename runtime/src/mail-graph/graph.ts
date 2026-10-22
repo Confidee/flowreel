@@ -39,6 +39,8 @@ import {
   TOKEN_OPERATION,
   isTransientRead,
   isTransientToken,
+  isTransientTransport,
+  noteTransportCause,
   statusMayHaveSent,
   tokenBackoffMs,
   transportCode,
@@ -343,6 +345,12 @@ export class GraphMailDriver implements MailDriver {
   private token: { value: string; expiresAt: number } | null = null
   private pendingToken: Promise<string> | null = null
   private savedCount = 0
+  /**
+   * The endpoints that answered this driver at least once (a status line,
+   * whatever the status): only then may waitFor re-poll a transient
+   * transport error on them (#23). First contact fails fast.
+   */
+  private readonly answered = new Set<"token" | "graph">()
   /** Cleared once Graph refuses `contains(subject,…)` (see listSince). */
   private subjectFilter = true
   private readonly copy: GraphDriverCopy
@@ -454,9 +462,14 @@ export class GraphMailDriver implements MailDriver {
    * token request that got no answer, was throttled (429), met a server
    * error (500, 502, 503, 504) or was told temporarily_unavailable is
    * re-polled after Retry-After when sent, else after 5 s, 10 s, 20 s … up
-   * to 60 s; never past the wait's end. Any other failure, a connection
-   * error included, ends the wait at once. What a re-poll observed is
-   * reported count-only: never an error's text.
+   * to 60 s; never past the wait's end. A temporary network failure on a
+   * read or the token request (outcome.ts's allowlist: a reset or closed
+   * connection, a timeout, a transient DNS answer) gets the same back-off
+   * (#23), counted apart for the token and the reads, once that endpoint
+   * has answered this driver: at first contact it ends the wait, so a
+   * firewall or broken DNS fails fast. Any other failure ends the wait at
+   * once. What a re-poll observed is reported count-only: the step, an OS
+   * or undici code and a count, never an error's text.
    */
   async waitFor(query: MailQuery): Promise<MailMessage> {
     const subject = query.subjectIncludes
@@ -475,6 +488,10 @@ export class GraphMailDriver implements MailDriver {
     const fetched = new Map<string, MailMessage>()
     /** Consecutive transient token failures: the back-off doubles with each. */
     let tokenFailures = 0
+    /** Consecutive transient transport failures of the reads (#23). */
+    let readFailures = 0
+    /** Whether a list read completed in this wait, for what is observed. */
+    let listed = false
     let lastObserved: string | undefined
     const observe = (observed: string) => {
       lastObserved = observed
@@ -492,9 +509,9 @@ export class GraphMailDriver implements MailDriver {
           // ones double the back-off.
           await this.accessToken(deadline)
           tokenFailures = 0
-          const candidates = (
-            await this.listSince(guarded.since, subject, deadline)
-          )
+          const list = await this.listSince(guarded.since, subject, deadline)
+          listed = true
+          const candidates = list
             .filter((m) => (m.subject ?? "").includes(subject))
             .filter((m) => !guarded.excludeIds?.includes(m.id))
             .filter(
@@ -517,6 +534,8 @@ export class GraphMailDriver implements MailDriver {
               return { value: message }
             }
           }
+          // A completed poll ends a run of read failures.
+          readFailures = 0
           // Counts only: the candidates are this run's own mail, but nothing
           // about any message reaches the TimeoutError (and so summary.md).
           return observe(
@@ -525,6 +544,24 @@ export class GraphMailDriver implements MailDriver {
               : `${candidates.length} message(s) with ${JSON.stringify(subject)} in the subject since the query start, none matching`,
           )
         } catch (error) {
+          if (isTransientTransport(error)) {
+            const token = error.operation === TOKEN_OPERATION
+            if (!this.answered.has(token ? "token" : "graph")) throw error
+            const failures = token ? ++tokenFailures : ++readFailures
+            const wait = tokenBackoffMs(
+              undefined,
+              failures,
+              deadline - this.now(),
+            )
+            if (wait > 0) await this.sleep(wait)
+            // The step, the code (allowlisted) and the count: never the
+            // error's text, which can name a host or a peer.
+            return observe(
+              token
+                ? `Graph token request failed (${error.code}), ${failures} in a row, retrying`
+                : `Graph read failed (${error.code}), ${failures} in a row${listed ? "" : ", no mailbox read completed in this wait"}, retrying`,
+            )
+          }
           if (isTransientToken(error)) {
             tokenFailures += 1
             const wait = tokenBackoffMs(
@@ -913,6 +950,9 @@ export class GraphMailDriver implements MailDriver {
           // Once a send's 2xx status arrived, it was sent: its (empty) body
           // is not waited for, so a body failure cannot turn it into an error.
           readBody: sends ? (response) => !response.ok : undefined,
+          onResponse: () => {
+            this.answered.add(operation === TOKEN_OPERATION ? "token" : "graph")
+          },
         },
       )
     } catch (error) {
@@ -929,6 +969,7 @@ export class GraphMailDriver implements MailDriver {
         operation,
         { code, mayHaveSent, clientRequestId },
       )
+      noteTransportCause(transport, error)
       if (!transportMayHaveSent(error)) NEVER_CONNECTED.add(transport)
       // eslint-disable-next-line preserve-caught-error
       throw transport

@@ -19,6 +19,24 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   (`mayHaveSent: false`), never followed and never retried. A project
   that passes its own `fetch` must make one attempt per call and never
   follow redirects.
+- **`summary.md`, `summary.json` and `summary.lines` no longer carry
+  Playwright's call log (#26).** Affects 0.3.0 and earlier. The summary
+  reporter copied up to 4000 characters of every error, and a failed
+  Playwright request's error goes on, after its first line, with a
+  "Call log" that names the full URL with its query string, every
+  request header (the persona's session cookie, a CSRF token) and a
+  response's `set-cookie` (on a stalled sign-in, the fresh session
+  cookie): the file flowreel tells you to share could carry a live
+  session. The summary now keeps an error up to its call log and drops
+  every `http(s)://` URL's query string and fragment; the HTML report
+  (where a `toHaveURL` failure that differs only in its query still shows
+  the difference) and traces keep
+  the whole error and stay credential-bearing. flowreel's own sign-in
+  seam and session probes rethrow the first line of Playwright's error
+  only, without a cause, and so do the template and example adapters. If
+  you shared a `summary.md` from a run that failed on a request, check it
+  for a `Call log:` block and revoke the sessions it names (a completed
+  teardown already revoked them).
 
 ### Added
 
@@ -66,8 +84,62 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   `Seam <METHOD> <path> got no answer within 30 s; raise requestTimeoutMs if a job drain legitimately takes longer`
   (#20).
 
+- `requestTimeoutMs` for flowreel's session requests (#24), 30 s by
+  default, validated like every flowreel request bound (a whole number of
+  milliseconds from 1 to 2147483647, else a `ConfigError` naming the
+  option): on `seamSignIn`'s options (`@confidee/flowreel/rails-inertia`),
+  on `SessionProtocol` (`isSessionSignedOut`; `revokeSession`, which never
+  throws, returns `revoked: false` naming the option, so teardown warns
+  loudly), and on
+  `createPersonaApis` and `tourFixtures()` for every persona request. It
+  is the `timeout` of each request context they open.
+- `requestFailure(error)` from `@confidee/flowreel/core`: what may be
+  said of a failed Playwright request, the first line of its message
+  without a URL's query string, at most 300 characters. For a project's
+  own adapter (#26).
+- `/flowreel:doctor` advises when `e2e/flowreel/adapter.ts` opens request
+  contexts without a timeout (an adapter scaffolded before 0.4.0). It
+  only reads the file, with grep.
+
 ### Changed
 
+- `GraphMailDriver.waitFor`: a temporary network failure on a mail read
+  or the token request is now re-polled instead of ending the wait (#23):
+  `ECONNRESET`, `UND_ERR_SOCKET`, `EPIPE`, `ECONNABORTED`, `ETIMEDOUT`,
+  `EAI_AGAIN` and undici's connect, headers and body timeouts (an
+  `AggregateError` only when every inner code is listed), with the
+  token's back-off (5 s, then 10 s, 20 s … up to 60 s, never past the
+  wait's end, on top of the wait's own poll interval), counted apart for the token request and the reads. Only
+  once that endpoint has answered the driver: at first contact the same
+  error still ends the wait, so a firewall or broken DNS fails fast. Any
+  other code, or none, stays fatal (`ECONNREFUSED`, `ENOTFOUND`, TLS, a
+  custom `fetch` that throws a plain error), nothing that may have sent
+  mail is ever re-polled, and nothing is retried outside `waitFor`. A
+  wait that times out reports the step, the code and the count only
+  (`Last observed: Graph read failed (ECONNRESET), 3 in a row, no mailbox read completed in this wait, retrying`).
+- `GraphMailDriver.waitFor` re-polls a `429`, `503` or `504` only on a
+  GET read; a write's never was reachable there, and now cannot be.
+- The persona request contexts (`createPersonaApis`, the tour's `as()`
+  and `personaApis`) now have a 30 s `timeout` of their own, which
+  overrides the project's `actionTimeout` for them (15 s under flowreel's
+  `createConfig`); a request's own `timeout` still wins. Set
+  `requestTimeoutMs` on `tourFixtures()` for a longer one.
+- Global teardown (`signOutAll`) now survives an `AppAdapter.signOut`
+  that throws, against its contract: that persona gets the loud "could
+  not sign out" warning (with the first line of the error) and the other
+  personas are still signed out. Before, one throw skipped every later
+  persona.
+- `seamSignIn` and `isSessionSignedOut` throw
+  `Test sign-in (POST <path>) failed: …` and
+  `Session probe GET <path> failed: …` with the first line of
+  Playwright's error, instead of Playwright's error itself (#26).
+- The template adapter (`/flowreel:init`) and the example's set a
+  `REQUEST_TIMEOUT_MS` (30 s) on every request context and on `SESSION`,
+  describe a failed request with `requestFailure()`, and `health()`
+  returns a failed request's first line instead of throwing; the
+  template ships `unit/adapter.spec.ts`, which checks both. `/flowreel:init`
+  never rewrites an existing adapter: copy these lines into one you
+  scaffolded before (the doctor points it out).
 - `GraphMailDriver`: a failed `sendMail` or reply `send` now says whether
   the mail may have been sent from everything observed, not only a
   timeout. Any 5xx but 509 (503 included) and any transport failure that
@@ -84,9 +156,10 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   `temporarily_unavailable`) is now re-polled instead of ending the wait,
   after the response's Retry-After exactly, else 5 s, then 10 s, 20 s …
   up to 60 s, never past the wait's end. A token request that got no
-  answer gets the same back-off. Credentials failures and token transport
-  errors stay fatal, and nothing is retried outside `waitFor` (#18). Only
-  consecutive failures double the back-off: a token obtained resets it.
+  answer gets the same back-off. Credentials failures stay fatal (token
+  transport errors: see #23 above), and nothing is retried outside
+  `waitFor` (#18). Only consecutive failures double the back-off: a token
+  obtained resets it.
 - `GraphMailDriver.health()`: a request that could not connect (a DNS,
   connect or TLS failure) now points at the network path, not the
   credentials.
@@ -98,6 +171,15 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ### Fixed
 
+- flowreel's session requests could hang (#24). The sign-in seam, the
+  session probes and sign-out, the persona API contexts and the template
+  adapter opened request contexts without a `timeout`, so they got
+  Playwright's default: 30 s in global setup and teardown, the project's
+  `actionTimeout` in a test (15 s under `createConfig`), and none at all
+  with `actionTimeout: 0` or without flowreel's config, where a server
+  that never answered, or a body that never ended, hung the run until
+  the test or fixture timeout. Every one of them is now bounded by
+  `requestTimeoutMs` (30 s by default), body included.
 - A Microsoft Graph request that never answered could stall a run (#16).
   A hung request ended only at Node's `fetch` limit of 300 s, a body that
   trickled in never ended, a hung token request held up every later call

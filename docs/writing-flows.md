@@ -132,6 +132,15 @@ No fixture ever signs in. Every session comes from global setup, and asking
 for a persona that is not configured on this target fails at once with a
 message naming it.
 
+Every request through `as(persona)` and `personaApis` gets at most
+`requestTimeoutMs` (a `tourFixtures()` option, 30 s by default), from the
+connection to the last byte of the body: it is the `timeout` of each
+persona's request context, so it overrides the project's `actionTimeout`
+for them, and a request's own `timeout` still wins. A request that runs
+out fails with Playwright's error, whose call log names the session
+cookie: `summary.md`, `summary.json` and `summary.lines` keep only what
+comes before it.
+
 ### The video log (needed for videos)
 
 The run video is cut from the page recording using a timing log: when the

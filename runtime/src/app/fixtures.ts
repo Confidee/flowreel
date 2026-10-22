@@ -4,6 +4,10 @@ import type { APIRequest, APIRequestContext } from "@playwright/test"
 
 import type { Env } from "../core/env.js"
 import { ConfigError } from "../core/errors.js"
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  assertRequestTimeoutMs,
+} from "../core/http.js"
 
 import {
   STATE_ENV_PREFIX,
@@ -59,17 +63,28 @@ export interface PersonaApisOptions<P extends string, A> {
   stateFor: (persona: P) => StorageState
   /** Wraps a persona's (lazily opened) context in the project's client. */
   client: (context: APIRequestContext, persona: P) => A
+  /**
+   * How long each request of a persona's context may take, from the
+   * connection to the last byte of the body, in milliseconds (the
+   * context's `timeout`; a request's own `timeout` still wins). Default
+   * 30 000, which overrides the project's actionTimeout for these
+   * requests. A whole number from 1 to 2 147 483 647, else a ConfigError.
+   */
+  requestTimeoutMs?: number
 }
 
 /**
  * Lazily opened, per-persona request contexts and clients. A client is
  * built synchronously over a proxy that opens its persona's context on the
  * first call, so a persona that is never used never gets a context; asking
- * for an unconfigured persona fails at once (stateFor throws).
+ * for an unconfigured persona fails at once (stateFor throws). Every
+ * context is opened with `timeout: requestTimeoutMs` (#24).
  */
 export function createPersonaApis<P extends string, A>(
   options: PersonaApisOptions<P, A>,
 ): PersonaApis<P, A> {
+  const timeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  assertRequestTimeoutMs(timeout, "createPersonaApis option requestTimeoutMs")
   const contexts = new Map<P, APIRequestContext>()
   const clients = new Map<P, A>()
   const request = async (persona: P) => {
@@ -78,6 +93,7 @@ export function createPersonaApis<P extends string, A>(
       context = await options.api.newContext({
         baseURL: options.baseURL,
         storageState: options.stateFor(persona),
+        timeout,
       })
       contexts.set(persona, context)
     }

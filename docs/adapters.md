@@ -110,6 +110,21 @@ export const appAdapter: AppAdapter<"agent" | "admin"> = {
 the **original** state to prove the session is dead. A session that is
 already signed out counts as revoked.
 
+Every request these helpers make is bounded by the protocol's
+`requestTimeoutMs` (30 s by default, the `timeout` of every context they
+open, which overrides the project's `actionTimeout` for them; a whole
+number of milliseconds from 1 to 2147483647, else a `ConfigError`;
+`revokeSession`, which never throws, returns `revoked: false` naming the
+option instead, so teardown warns and goes on to the next persona).
+`isSessionSignedOut` throws
+`Session probe GET <path> failed: <first line of Playwright's error>` for
+a probe that fails, and `revokeSession` never throws for the network: its
+`detail` names the error's class. Neither passes Playwright's call log on
+(it names the session cookie). Describe your own adapter's request
+failures the same way, with `requestFailure(error)` from
+`@confidee/flowreel/core`: the first line of a Playwright error, without a
+URL's query string.
+
 Wire the adapter into Playwright's global hooks:
 
 ```ts
@@ -540,14 +555,17 @@ by `requestTimeoutMs` (30 s by default), so a seam that never answers
 fails the run instead of hanging it:
 
 - `seamHttpFromRequest(request, { requestTimeoutMs? })` passes the bound
-  as Playwright's own per-call `timeout`, which covers the body too. This
-  matters inside `@playwright/test`: there a request context has no
-  timeout of its own (`actionTimeout`, which defaults to none), so without
-  it a seam that never answers waits forever. A timeout rejects with
-  Playwright's own error, in Playwright's wording. That error carries a
-  call log with the full URL and the context's request headers, the
-  persona's session cookie included: it is development only and loopback
-  only, but never paste it into a public issue.
+  as Playwright's own per-call `timeout`, which covers the body too, and
+  overrides the context's default. Without it a request context gets
+  Playwright's: 30 s in global setup and teardown, and in a test the
+  project's `actionTimeout` (15 s under flowreel's `createConfig`, none at
+  all with `actionTimeout: 0` or without flowreel's config). A timeout
+  rejects with Playwright's own error, in Playwright's wording. That
+  error carries a call log with the full URL and the context's request
+  headers, the persona's session cookie included: it is development only
+  and loopback only, but never paste it into a public issue.
+  `summary.md`, `summary.json` and `summary.lines` drop the call log
+  (#26); the HTML report and traces keep it.
 - `seamHttpFromFetch(baseURL, fetchOrOptions?)` takes either the `fetch`
   to use (the original form) or an options object: `fetch`,
   `requestTimeoutMs`, and `setTimeout` and `clearTimeout` (for unit
@@ -565,8 +583,13 @@ than 30 s. Nothing is retried.
 
 `seamSignIn(api, baseURL, options)` posts `options.body` to the sign-in
 seam in a fresh request context and returns its storageState. Options:
-`path`, `accept(status)` (default any 2xx) and `failure(status)` (the
-`LoginError` text; never put a password in it).
+`path`, `accept(status)` (default any 2xx), `failure(status)` (the
+`LoginError` text; never put a password in it) and `requestTimeoutMs`
+(30 s by default, the context's `timeout`, validated like the clients').
+A request that fails (no answer in time, a refused connection) throws
+`Test sign-in (POST <path>) failed: <first line of Playwright's error>`,
+never its call log, which can carry the session cookie the seam just
+set.
 
 `HttpSeamMailDriver` (`kind: "seam"`) implements `MailDriver`:
 
@@ -739,11 +762,33 @@ What it does:
 - **Never retried**: a send or a reply, and nothing outside `waitFor`
   (`health()` and `saveEml()` included). Inside `waitFor` only these are
   re-polled: a `429`, `503` or `504` on the list (honouring Retry-After),
-  a read that got no answer, and a transient token request (below). Any
-  other failure ends the wait at once: auth and permission errors, a
-  token request refused for its credentials, and a connection error such
-  as `ECONNREFUSED` (a read that could not connect is not a read that is
-  slow).
+  a read that got no answer, a transient token request, and a temporary
+  network failure on a read or the token request (both below). Any other
+  failure ends the wait at once: auth and permission errors, a token
+  request refused for its credentials, and a configuration fault such as
+  `ECONNREFUSED`, `ENOTFOUND` or a TLS error (a wrong host or a proxy
+  that refuses fails fast).
+- **A temporary network failure inside `waitFor` is re-polled (#23)**, on
+  a mail read (the list, a message GET) or the token request, never on
+  anything that sends. Only these codes, an allowlist: `ECONNRESET`,
+  `UND_ERR_SOCKET` (a closed connection, a body cut short), `EPIPE`,
+  `ECONNABORTED`, `ETIMEDOUT`, `EAI_AGAIN` (a transient DNS answer), and
+  undici's `UND_ERR_CONNECT_TIMEOUT`, `UND_ERR_HEADERS_TIMEOUT` and
+  `UND_ERR_BODY_TIMEOUT`; for an `AggregateError`, only when every inner
+  code is listed. Any other code, or none (a project's own `fetch` that
+  throws a plain error), ends the wait. The back-off is the token's: 5 s,
+  then 10 s, 20 s … up to 60 s, never past the wait's end and on top of
+  the wait's own poll interval, counted apart
+  for the token request and for the reads (a token in hand ends a run of
+  token failures, a completed poll a run of read failures). And only once
+  that endpoint has answered this driver (any status line counts): a
+  connection error at first contact, before `login.microsoftonline.com`
+  or `graph.microsoft.com` ever answered, ends the wait at once, so a
+  firewall or broken DNS fails fast instead of spending the whole wait.
+  The wait reports the step, the code and the count only
+  (`Graph read failed (ECONNRESET), 3 in a row, no mailbox read completed in this wait, retrying`,
+  `Graph token request failed (ECONNRESET), 2 in a row, retrying`), never
+  the error's text, a host or a path.
 - **A transient token request inside `waitFor` is re-polled**: HTTP `429`,
   `500`, `502`, `503` or `504`, an OAuth `error` of
   `temporarily_unavailable` (whatever the status), or no answer. Before
@@ -755,8 +800,9 @@ What it does:
   (`Graph token request HTTP 503, retrying`,
   `Graph token request got no answer within 30 s, retrying`), never the
   error's text. A bad secret, tenant or consent (any other `400` or `401`)
-  stays fatal, and so does a token transport error. The decision never
-  reads `error_description` (the AADSTS text).
+  stays fatal; a token transport error is re-polled only when it is a
+  temporary network failure (above). The decision never reads
+  `error_description` (the AADSTS text).
 - **Every request is bounded**: each Graph and token request, from the
   connection to the last byte of the body, gets `requestTimeoutMs` (30 s
   by default). Inside `waitFor` a request gets no more than the wait has

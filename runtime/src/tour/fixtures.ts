@@ -91,6 +91,11 @@ export interface TourFixtureOptions<P extends string, A> {
   statePrefix?: string
   /** The project's client over a persona's request context. */
   client: Parameters<typeof createPersonaApis<P, A>>[0]["client"]
+  /**
+   * The bound of every persona request (createPersonaApis): default 30 000
+   * ms, which overrides the project's actionTimeout for them.
+   */
+  requestTimeoutMs?: number
   /** The run's undo store (its run folder). */
   undoStore: (runId: string) => UndoStore
   /** The run's inbound budget (a file in its run folder). */
@@ -142,6 +147,7 @@ export function tourFixtures<P extends string, A>(
           baseURL: options.baseURL(),
           stateFor: options.stateFor,
           client: options.client,
+          requestTimeoutMs: options.requestTimeoutMs,
         })
         await use(apis)
         await apis.dispose()

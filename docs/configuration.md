@@ -324,17 +324,17 @@ what must not change:
 | `forbidOnly` on CI                                           | a stray `test.only` must not pass a gate                                                                                                                                                                      |
 | `launchOptions` `handleSIGTERM: false`                       | a CI signals the whole process group; a browser that closed itself would lose the running test's video. The runner stops gracefully and closes it. A project's own launchOptions keep this unless they set it |
 
-| Input                                                 | Meaning                                                                         |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `target`, `baseURL`                                   | from `readTarget()` and `resolveBaseUrl()`                                      |
-| `resultsDir`, `reportDir`                             | from `resultsDir(config, runId)` and `reportDir(config, runId)`                 |
-| `reporter`, `globalSetup`, `globalTeardown`           | module paths, relative to the config file                                       |
-| `testDir`, `timeout`, `projects`, `testIgnore`        | as in Playwright                                                                |
-| `video: { on, size? }`                                | on from `videoEnabled()`; size `APP_VIEWPORT` (1680x945) for full-quality reels |
-| `slowMo`                                              | from the pace (`PACE_SLOW_MO`) or `FLOWREEL_SLOW_MO`                            |
-| `use`                                                 | extra Playwright `use` options, merged under flowreel's                         |
-| `webServer`                                           | `localWebServer({ cwd, port, command, readyPath, baseURL, reuse, env })`        |
-| `expectTimeout`, `actionTimeout`, `navigationTimeout` | default 15 s, 15 s, 30 s                                                        |
+| Input                                                 | Meaning                                                                              |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `target`, `baseURL`                                   | from `readTarget()` and `resolveBaseUrl()`                                           |
+| `resultsDir`, `reportDir`                             | from `resultsDir(config, runId)` and `reportDir(config, runId)`                      |
+| `reporter`, `globalSetup`, `globalTeardown`           | module paths, relative to the config file                                            |
+| `testDir`, `timeout`, `projects`, `testIgnore`        | as in Playwright                                                                     |
+| `video: { on, size? }`                                | on from `videoEnabled()`; size `APP_VIEWPORT` (1680x945) for full-quality reels      |
+| `slowMo`                                              | from the pace (`PACE_SLOW_MO`) or `FLOWREEL_SLOW_MO`                                 |
+| `use`                                                 | extra Playwright `use` options, merged under flowreel's                              |
+| `webServer`                                           | `localWebServer({ cwd, port, command, readyPath, baseURL, reuse, env })`             |
+| `expectTimeout`, `actionTimeout`, `navigationTimeout` | default 15 s, 15 s, 30 s (flowreel's own requests have their own `requestTimeoutMs`) |
 
 `localWebServer()` waits for `readyPath` (default `/up`) to answer, for up to
 180 seconds by default. Set `reuse: true` only when nothing per-run, such as

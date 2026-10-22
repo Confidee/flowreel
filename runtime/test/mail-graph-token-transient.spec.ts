@@ -314,7 +314,7 @@ test.describe("token errors that stay fatal", () => {
     })
   }
 
-  test("a token transport error ends the wait at once", async () => {
+  test("a token transport error before the token endpoint ever answered ends the wait at once (#23: first contact fails fast)", async () => {
     const c = virtualClock()
     const { fetch, calls } = fakeFetch(c, (call) =>
       isToken(call)

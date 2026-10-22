@@ -8,3 +8,5 @@ export * from "./poll.js"
 export * from "./env.js"
 export * from "./undo.js"
 export * from "./inbound-ledger.js"
+// What may be said of a failed Playwright request (#26): its first line.
+export { requestFailure } from "./http.js"

@@ -333,6 +333,16 @@ else
   optional "psql" "only for a Postgres per-run database copy" "$psql_install" "$psql_note"
 fi
 
+# 7. The scaffold's adapter (report mode only; read with grep, never run).
+#    An adapter copied before 0.4.0 opens its request contexts without a
+#    timeout of its own, so it relies on Playwright's default (#24).
+adapter="$project/e2e/flowreel/adapter.ts"
+if [ "$mode" = "report" ] && [ -f "$adapter" ] &&
+  grep -q 'newContext(' "$adapter" 2>/dev/null &&
+  ! grep -q 'timeout' "$adapter" 2>/dev/null; then
+  printf 'flowreel: advice     e2e/flowreel/adapter.ts opens request contexts without a timeout of its own (scaffolded before 0.4.0), so its requests rely on Playwright's default and its errors may pass a call log on. Add REQUEST_TIMEOUT_MS and requestFailure() as the 0.4.0 template does (see the CHANGELOG); this never affects a verdict.\n'
+fi
+
 if [ "$mode" = "session" ]; then
   if [ "$missing" -gt 0 ] || [ "$media_gaps" -gt 0 ]; then
     echo "flowreel: /flowreel:doctor explains each item and installs only after you confirm (video-only and voice-only items never affect a verdict)."

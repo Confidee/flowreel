@@ -5,6 +5,7 @@ import type { APIRequest, Browser, FullConfig } from "@playwright/test"
 import type { TargetName } from "../config/targets.js"
 import { type Env, envValue } from "../core/env.js"
 import { ConfigError } from "../core/errors.js"
+import { requestFailure } from "../core/http.js"
 
 import type { AppAdapter } from "./adapter.js"
 import { runLifecycle, settleWithin } from "./lifecycle.js"
@@ -139,11 +140,18 @@ export async function signOutAll<P extends string>(
     if (done.has(raw)) continue
     done.add(raw)
 
-    const { revoked, detail } = await adapter.signOut(
-      options.api,
-      run.baseURL,
-      state,
-    )
+    // signOut must never throw; one that does still gets its warning,
+    // and the other personas are still signed out.
+    let outcome: { revoked: boolean; detail: string }
+    try {
+      outcome = await adapter.signOut(options.api, run.baseURL, state)
+    } catch (error) {
+      outcome = {
+        revoked: false,
+        detail: `signOut threw: ${requestFailure(error)}`,
+      }
+    }
+    const { revoked, detail } = outcome
     results.push({ persona: key, revoked, detail })
     if (revoked) {
       log(`${logPrefix} signed out the ${key} persona (${detail}).`)

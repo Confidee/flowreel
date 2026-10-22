@@ -14,7 +14,7 @@ import {
   requireKeys,
   resolveBaseUrl,
 } from "@confidee/flowreel/config"
-import { type Env, LoginError } from "@confidee/flowreel/core"
+import { type Env, LoginError, requestFailure } from "@confidee/flowreel/core"
 import type { APIRequest, Browser } from "@playwright/test"
 
 import { type Module, type PersonaKey, flowreel } from "../../flowreel.config"
@@ -38,8 +38,17 @@ const SIGN_IN_PATH = "/login"
  */
 const LOCAL_SIGN_IN_SEAM: string | null = null
 
+/**
+ * How long any request this adapter makes may take, from the connection
+ * to the last byte of the body. Explicit rather than Playwright's default,
+ * which differs between global setup (30 s) and a test (actionTimeout,
+ * none when it is 0); it overrides the project's actionTimeout.
+ */
+export const REQUEST_TIMEOUT_MS = 30_000
+
 /** How a session is probed and revoked. */
 export const SESSION: SessionProtocol = {
+  requestTimeoutMs: REQUEST_TIMEOUT_MS,
   probePath: "/",
   isSignInPath: (path) => path.startsWith(SIGN_IN_PATH),
   // TODO(flowreel): your sign-out request.
@@ -171,11 +180,17 @@ async function seamSignIn(
   key: PersonaKey,
   persona: Persona,
 ): Promise<StorageState> {
-  const context = await api.newContext({ baseURL })
+  const context = await api.newContext({ baseURL, timeout: REQUEST_TIMEOUT_MS })
   try {
-    const response = await context.post(seam, {
-      data: { email: persona.email },
-    })
+    let response: Awaited<ReturnType<typeof context.post>>
+    try {
+      response = await context.post(seam, { data: { email: persona.email } })
+    } catch (error) {
+      // Its first line only: the call log can quote the fresh session cookie.
+      throw new LoginError(
+        `Test sign-in as the ${key} persona (${persona.email}) failed: ${requestFailure(error)}`,
+      )
+    }
     if (!response.ok()) {
       throw new LoginError(
         `Test sign-in as the ${key} persona (${persona.email}) returned HTTP ${response.status()}; is the local server running with its test seams enabled and the development accounts seeded?`,
@@ -203,11 +218,17 @@ export const appAdapter: AppAdapter<PersonaKey> = {
   isSignedOut: signedOutBy(SIGN_IN_PATH),
   keepalivePath: "/",
   async health(api, baseURL) {
-    const context = await api.newContext({ baseURL })
+    const context = await api.newContext({
+      baseURL,
+      timeout: REQUEST_TIMEOUT_MS,
+    })
     try {
       // TODO(flowreel): a path that answers 200 when the app is up.
       const response = await context.get("/")
       return response.ok() ? null : `GET / returned HTTP ${response.status()}`
+    } catch (error) {
+      // What is wrong, in its first line only: never the call log.
+      return `GET / failed: ${requestFailure(error)}`
     } finally {
       await context.dispose()
     }
