@@ -6,6 +6,16 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+Every request flowreel makes is bounded, and a failure says what it
+means. The Microsoft 365 driver never follows a redirect and says whether
+a failed send may have gone out; a mail wait rides out throttling and
+brief network drops; the sign-in, session and persona requests have a time
+limit; and the shared summary no longer carries Playwright's call log,
+which could hold a live session cookie. Two security fixes: upgrade if
+you use the Microsoft 365 driver or share `summary.md`.
+
 ### Security
 
 - **`GraphMailDriver` no longer follows redirects (#22).** Affects 0.3.0
