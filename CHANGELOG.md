@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-23
+
+A fix for the Claude Code plugin only: its prerequisite check failed with a
+syntax error in 0.4.0. The npm package's code is unchanged from 0.4.0; its
+version moves with the plugin's, which is what makes plugin users get the
+fix. Update the plugin with `/plugin marketplace update flowreel`.
+
 ### Fixed
 
 - The plugin's prerequisite check (`plugin/scripts/check-prereqs.sh`) ran
