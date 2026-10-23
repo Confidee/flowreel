@@ -6,6 +6,17 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Fixed
+
+- The plugin's prerequisite check (`plugin/scripts/check-prereqs.sh`) ran
+  into a syntax error in 0.4.0 and exited with 2 (#29): the session-start
+  hook showed a bash error in every session of a flowreel project, and
+  `/flowreel:doctor` lost its summary line. An apostrophe inside a
+  single-quoted string, in the `advice` line added in 0.4.0, ended the
+  string early. A test now parses every plugin shell script and runs the
+  check in both modes, under the shell on `PATH` and macOS's bash 3.2.
+  The npm package was not affected.
+
 ## [0.4.0] - 2026-10-22
 
 Every request flowreel makes is bounded, and a failure says what it

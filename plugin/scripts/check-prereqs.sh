@@ -340,7 +340,7 @@ adapter="$project/e2e/flowreel/adapter.ts"
 if [ "$mode" = "report" ] && [ -f "$adapter" ] &&
   grep -q 'newContext(' "$adapter" 2>/dev/null &&
   ! grep -q 'timeout' "$adapter" 2>/dev/null; then
-  printf 'flowreel: advice     e2e/flowreel/adapter.ts opens request contexts without a timeout of its own (scaffolded before 0.4.0), so its requests rely on Playwright's default and its errors may pass a call log on. Add REQUEST_TIMEOUT_MS and requestFailure() as the 0.4.0 template does (see the CHANGELOG); this never affects a verdict.\n'
+  printf 'flowreel: advice     e2e/flowreel/adapter.ts opens request contexts without a timeout of its own (scaffolded before 0.4.0), so its requests rely on the Playwright default and its errors may pass a call log on. Add REQUEST_TIMEOUT_MS and requestFailure() as the 0.4.0 template does (see the CHANGELOG); this never affects a verdict.\n'
 fi
 
 if [ "$mode" = "session" ]; then
