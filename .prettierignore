@@ -13,3 +13,8 @@ coverage/
 
 # A flowreel run report, kept exactly as flowreel wrote it
 assets/demo/run/
+
+# The portable Agent Skill's generated files: copies of plugin/ files with
+# their paths rewritten (scripts/sync-agent-skill.mjs), kept byte-exact
+skills/flowreel/references/
+skills/flowreel/scripts/

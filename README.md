@@ -150,6 +150,56 @@ for each OS.
 [docs/plugin.md](docs/plugin.md) lists every skill, agent and hook, and
 every command the plugin may run on your machine.
 
+### Use with any Agent Skills agent
+
+[`skills/flowreel/`](skills/flowreel/) is flowreel as a standard
+[Agent Skill](https://agentskills.io): one folder with a `SKILL.md` and
+its `references/` and `scripts/`, for any agent that reads the format. It
+covers the same workflows as the plugin (doctor, init, inventory, author,
+narrate, run, explain, demos). You ask for them in words, because there
+are no `/flowreel:*` commands, plugin agents or session-start check
+outside the plugin. In Claude Code, the plugin above is still the better
+choice.
+
+Get the folder, then copy it to where your agent looks for skills:
+
+```bash
+git clone --depth 1 https://github.com/Confidee/flowreel.git /tmp/flowreel-skill
+# then one of the copies below, from your project's folder
+```
+
+| Agent                     | Project (this repository only)                                                       | Personal (every project)      |
+| ------------------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
+| Claude Code               | `.claude/skills/flowreel/`                                                           | `~/.claude/skills/flowreel/`  |
+| Cursor                    | `.cursor/skills/flowreel/` or `.agents/skills/flowreel/`                             | `~/.cursor/skills/flowreel/`  |
+| GitHub Copilot in VS Code | `.github/skills/flowreel/`, `.agents/skills/flowreel/` or `.claude/skills/flowreel/` | `~/.copilot/skills/flowreel/` |
+
+```bash
+mkdir -p .agents/skills && cp -R /tmp/flowreel-skill/skills/flowreel .agents/skills/
+```
+
+`.agents/skills/` works for both Cursor and VS Code. Claude Code reads
+`.claude/skills/` instead. Then start a new chat and ask, for example,
+"set up flowreel in this project". In VS Code, **Open Customizations** in
+the Chat view lists the skill under **Skills**. Read `SKILL.md` before
+you rely on it, as you would for any skill you copy in.
+
+What has been checked, and what has not:
+
+- **Checked:** `SKILL.md` follows the Agent Skills specification and
+  passes its reference validator (`skills-ref validate`). We targeted the
+  specification at commit
+  [`69ef37e`](https://github.com/agentskills/agentskills/tree/69ef37e9424c0a7ea9dd2293b559e43ec8176379)
+  (2026-08-09); it has no version number of its own. The folders in the
+  table come from each agent's documentation, read on 2026-10-22:
+  [Claude Code](https://code.claude.com/docs/en/skills),
+  [Cursor](https://cursor.com/docs/context/skills),
+  [VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills).
+- **Not yet checked:** a run of the skill inside Cursor or VS Code, other
+  agents that read the format (Codex, Copilot CLI and so on), and
+  installing it from a marketplace. Cursor's import from GitHub needs a
+  `.cursor-plugin/marketplace.json`, which this repository does not have.
+
 ### Without the plugin
 
 From npm:
@@ -214,6 +264,7 @@ with three flows and a narrated video.
 | `@confidee/flowreel`                                                | [runtime/](runtime/)                   | The engine: TypeScript, ESM, Node >= 20, peer `@playwright/test` >= 1.56                                                 |
 | `@confidee/flowreel/rails-inertia`, `@confidee/flowreel/mail-graph` | [runtime/](runtime/)                   | Optional stack adapters, as subpath exports: the Inertia props reader and the seam client; the Microsoft 365 mail driver |
 | `flowreel` Claude Code plugin                                       | [plugin/](plugin/)                     | Skills, agents and a read-only prerequisite check around the runtime                                                     |
+| `flowreel` Agent Skill                                              | [skills/flowreel/](skills/flowreel/)   | The plugin's workflows as one standard Agent Skill, for any agent that reads the format; generated from `plugin/`        |
 | Example app                                                         | [examples/minimal/](examples/minimal/) | A tiny notes app with three flows and a narrated video, no Rails                                                         |
 | Docs                                                                | [docs/](docs/)                         | The guides above, the architecture and the design decisions                                                              |
 

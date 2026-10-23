@@ -6,6 +6,21 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Added
+
+- `skills/flowreel/`: flowreel as a standard
+  [Agent Skill](https://agentskills.io), for Cursor, GitHub Copilot in
+  VS Code and any other agent that reads the format, besides Claude Code.
+  It is one `SKILL.md`, written to the specification (only its six
+  frontmatter fields; checked against its reference validator at commit
+  `69ef37e`), that routes to the plugin's workflows. Its `references/` and
+  `scripts/` are generated from `plugin/` by
+  `npm run sync:agent-skill`, and a runtime test fails when they are stale
+  or `SKILL.md` breaks the specification. The plugin and its `/flowreel:*`
+  commands are unchanged, and nothing changes in the npm package. The
+  README's "Use with any Agent Skills agent" says where each agent looks
+  for it.
+
 ## [0.4.1] - 2026-10-23
 
 A fix for the Claude Code plugin only: its prerequisite check failed with a

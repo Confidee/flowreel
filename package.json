@@ -12,7 +12,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:leaks": "node scripts/check-leaks.mjs",
-    "check:version": "node scripts/check-version.mjs"
+    "check:version": "node scripts/check-version.mjs",
+    "sync:agent-skill": "node scripts/sync-agent-skill.mjs",
+    "check:agent-skill": "node scripts/sync-agent-skill.mjs --check"
   },
   "devDependencies": {
     "prettier": "^3.9.10"
