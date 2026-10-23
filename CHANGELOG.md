@@ -6,6 +6,14 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Added
+
+- The plugin has an icon (`plugin/.claude-plugin/icon.png`, the brand
+  avatar at 1024x1024) and the `documentationUrl` and `supportUrl` that
+  Anthropic's plugin directory shows. Its README says where it works:
+  everything in Claude Code; in claude.ai chat it can explain and plan, but
+  not run anything.
+
 ## [0.5.0] - 2026-10-23
 
 flowreel is now also a standard Agent Skill: one folder, `skills/flowreel/`,

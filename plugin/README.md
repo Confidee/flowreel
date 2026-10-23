@@ -9,6 +9,22 @@ The plugin never installs anything without asking, and no hook downloads
 or installs anything. The verdict always belongs to Playwright: no skill or
 agent decides it or edits an assertion.
 
+## Where it works
+
+flowreel runs on your machine: it needs Node.js, Playwright and your app,
+and it runs commands and writes files in your project. Where you use the
+plugin decides how much of that it can do:
+
+| Where                                                    | What loads                                 | What flowreel can do                                                              |
+| -------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| Claude Code (terminal, IDE extensions, desktop Code tab) | skills, agents and the session-start check | everything: check prerequisites, set up, write flows, run, explain, publish demos |
+| Cowork, in a session that runs on your computer          | skills, agents and the session-start check | the same in principle; not yet tested                                             |
+| claude.ai chat (web, desktop, mobile)                    | skills only (agents and hooks are ignored) | explain flowreel and plan a setup; it cannot run anything on your machine         |
+
+Use it in Claude Code. Without the plugin, any agent that reads the
+Agent Skills format can use [`skills/flowreel`](https://github.com/Confidee/flowreel/tree/main/skills/flowreel)
+instead.
+
 ## Install
 
 The marketplace (named `flowreel`) is the `.claude-plugin/marketplace.json`
