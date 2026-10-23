@@ -161,28 +161,39 @@ are no `/flowreel:*` commands, plugin agents or session-start check
 outside the plugin. In Claude Code, the plugin above is still the better
 choice.
 
-Get the folder, then copy it to where your agent looks for skills:
+Get the folder from a release (0.5.0 or later; the
+[Releases](https://github.com/Confidee/flowreel/releases) page names the
+newest), then copy it to where your agent looks for skills:
 
 ```bash
-git clone --depth 1 https://github.com/Confidee/flowreel.git /tmp/flowreel-skill
-# then one of the copies below, from your project's folder
+git clone --depth 1 --branch v<version> https://github.com/Confidee/flowreel.git /tmp/flowreel-skill
+mkdir -p .claude/skills && cp -R /tmp/flowreel-skill/skills/flowreel .claude/skills/
 ```
 
-| Agent                     | Project (this repository only)                                                       | Personal (every project)      |
-| ------------------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
-| Claude Code               | `.claude/skills/flowreel/`                                                           | `~/.claude/skills/flowreel/`  |
-| Cursor                    | `.cursor/skills/flowreel/` or `.agents/skills/flowreel/`                             | `~/.cursor/skills/flowreel/`  |
-| GitHub Copilot in VS Code | `.github/skills/flowreel/`, `.agents/skills/flowreel/` or `.claude/skills/flowreel/` | `~/.copilot/skills/flowreel/` |
+`.claude/skills/` in your project works for all three agents below.
+Each also reads its own folders:
 
-```bash
-mkdir -p .agents/skills && cp -R /tmp/flowreel-skill/skills/flowreel .agents/skills/
-```
+| Agent                     | Project (this repository only)                                          | Personal (every project)                                         |
+| ------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Claude Code               | `.claude/skills/flowreel/`                                              | `~/.claude/skills/flowreel/`                                     |
+| Cursor                    | `.cursor/skills/`, `.agents/skills/` or `.claude/skills/` + `flowreel/` | `~/.cursor/skills/`, `~/.agents/skills/` or `~/.claude/skills/`  |
+| GitHub Copilot in VS Code | `.github/skills/`, `.agents/skills/` or `.claude/skills/` + `flowreel/` | `~/.copilot/skills/`, `~/.agents/skills/` or `~/.claude/skills/` |
 
-`.agents/skills/` works for both Cursor and VS Code. Claude Code reads
-`.claude/skills/` instead. Then start a new chat and ask, for example,
-"set up flowreel in this project". In VS Code, **Open Customizations** in
-the Chat view lists the skill under **Skills**. Read `SKILL.md` before
-you rely on it, as you would for any skill you copy in.
+Then start a new chat and ask, for example, "set up flowreel in this
+project". In VS Code, **Open Customizations** in the Chat view lists the
+skill under **Skills**. Read `SKILL.md` before you rely on it, as you
+would for any skill you copy in.
+
+**What the plugin enforces and the skill can only ask for.** In the
+plugin, every workflow but explain starts only when you call it, and the
+two exploring agents can only read. The specification has no field for
+either, so the skill states both as rules the agent must follow:
+
+- start a workflow only when you ask for it;
+- only read while exploring an app or a run.
+
+An agent that ignores its instructions is not stopped by anything. Use
+the plugin where you can.
 
 What has been checked, and what has not:
 
@@ -190,8 +201,9 @@ What has been checked, and what has not:
   passes its reference validator (`skills-ref validate`). We targeted the
   specification at commit
   [`69ef37e`](https://github.com/agentskills/agentskills/tree/69ef37e9424c0a7ea9dd2293b559e43ec8176379)
-  (2026-08-09); it has no version number of its own. The folders in the
-  table come from each agent's documentation, read on 2026-10-22:
+  (2026-08-09); it has no version number of its own. In CI, a stricter
+  check of our own runs on every change. The folders in the table come
+  from each agent's documentation, read on 2026-10-22 and 2026-10-23:
   [Claude Code](https://code.claude.com/docs/en/skills),
   [Cursor](https://cursor.com/docs/context/skills),
   [VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills).

@@ -11,3 +11,9 @@ export declare function parseFrontmatter(
   text: string,
 ): Record<string, string | Record<string, string>>
 export declare function validate(dir: string, text?: string): string[]
+export declare function generateFrom(rootDir: string): Map<string, string>
+export declare function skillPaths(text: string): string[]
+export declare function checkDisk(
+  files: Map<string, string>,
+  dir: string,
+): string[]

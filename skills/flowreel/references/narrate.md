@@ -1,5 +1,7 @@
 <!-- Generated from plugin/skills/narrate/SKILL.md in the flowreel repository (by its sync-agent-skill.mjs). Edit the source there, then run `npm run sync:agent-skill`. -->
 
+> In the plugin this workflow starts only when the user asks for it (`disable-model-invocation`). Here too: start it only on the user's request in this conversation.
+
 # /flowreel:narrate
 
 Writes what the demo videos say. Narration changes only

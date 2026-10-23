@@ -1,5 +1,7 @@
 <!-- Generated from plugin/skills/init/SKILL.md in the flowreel repository (by its sync-agent-skill.mjs). Edit the source there, then run `npm run sync:agent-skill`. -->
 
+> In the plugin this workflow starts only when the user asks for it (`disable-model-invocation`). Here too: start it only on the user's request in this conversation.
+
 # /flowreel:init
 
 Adds flowreel to this project from the plugin's templates. Nothing is
@@ -11,7 +13,7 @@ Arguments: the user's arguments (`--tour` also scaffolds the feature tour;
 ## 1. Look first (read-only)
 
 - Run `/flowreel:doctor`'s check if the user has not: `bash
-scripts/check-prereqs.sh --report`.
+<this skill's folder>/scripts/check-prereqs.sh --report`.
 - Read `package.json` (scripts, devDependencies, `"type"`), `.gitignore`,
   any `tsconfig.json`, and how the app starts in development (its dev
   script, Procfile, README).

@@ -1,5 +1,7 @@
 <!-- Generated from plugin/skills/doctor/SKILL.md in the flowreel repository (by its sync-agent-skill.mjs). Edit the source there, then run `npm run sync:agent-skill`. -->
 
+> In the plugin this workflow starts only when the user asks for it (`disable-model-invocation`). Here too: start it only on the user's request in this conversation.
+
 # /flowreel:doctor
 
 Checks what flowreel needs on this machine and in this project, explains
@@ -11,13 +13,13 @@ user's explicit yes for that command.**
 Run the plugin's check in report mode with Bash:
 
 ```bash
-bash scripts/check-prereqs.sh --report
+bash <this skill's folder>/scripts/check-prereqs.sh --report
 ```
 
 It only reads (versions, the project's `"type"`, the Playwright download
 cache, `ffmpeg -encoders`, `say -v '?'`, and, with grep, whether
 `e2e/flowreel/adapter.ts` sets a request timeout), never installs and
-always exits 0. The project is `$CLAUDE_PROJECT_DIR`. Each line is `ok`, `missing`
+always exits 0. The project is the folder it runs in (or `$CLAUDE_PROJECT_DIR` when set). Each line is `ok`, `missing`
 (required: Node.js, `@playwright/test`, Chromium), `video-only` (ffmpeg,
 ffprobe: only the MP4s need them), `voice-only` (`say`, a Premium voice:
 only the narration), `optional`, `unchecked` or `advice` (an adapter

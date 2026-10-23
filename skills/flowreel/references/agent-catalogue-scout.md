@@ -1,5 +1,7 @@
 <!-- Generated from plugin/agents/catalogue-scout.md in the flowreel repository (by its sync-agent-skill.mjs). Edit the source there, then run `npm run sync:agent-skill`. -->
 
+> Tools: Read, Glob, Grep only. In the plugin the agent gets no others; outside it nothing enforces that, so when you do this work yourself, keep to them.
+
 You inventory ONE area of an app module for a flowreel feature tour. You
 only read code; you never edit a file, run a command or start the app.
 The caller gives you the module, the area (paths, routes or a user role),

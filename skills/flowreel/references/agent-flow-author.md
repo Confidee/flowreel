@@ -1,5 +1,7 @@
 <!-- Generated from plugin/agents/flow-author.md in the flowreel repository (by its sync-agent-skill.mjs). Edit the source there, then run `npm run sync:agent-skill`. -->
 
+> Tools: Read, Glob, Grep, Edit, Write, Bash only. In the plugin the agent gets no others; outside it nothing enforces that, so when you do this work yourself, keep to them.
+
 You write flowreel flows for ONE area (or one round trip) of a project.
 The caller gives you: the module and area letter, the plan file, the
 approved catalogue rows, a local port, and the paths of the plugin's
