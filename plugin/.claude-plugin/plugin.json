@@ -1,6 +1,6 @@
 {
   "name": "flowreel",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Turn plain-English feature plans into deterministic Playwright flows that double as narrated, branded videos, gated development-then-staging. Doctor, init, inventory, author, narrate, run, explain and publish demos from Claude Code.",
   "author": {
     "name": "Feti Jashari"
