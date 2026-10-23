@@ -207,6 +207,18 @@ What has been checked, and what has not:
   [Claude Code](https://code.claude.com/docs/en/skills),
   [Cursor](https://cursor.com/docs/context/skills),
   [VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills).
+- **Run in Claude Code without the plugin** (2026-10-23, Claude Code
+  2.1.309): a new Node app, with the skill installed as above from the
+  v0.5.0 tag and the flowreel plugin switched off.
+  - From plain requests, Claude Code loaded the skill and checked the
+    prerequisites from the project.
+  - It showed the set-up plan and waited for a yes before writing.
+  - It scaffolded from the tag's templates and installed
+    `@confidee/flowreel` from npm.
+  - It wrote the round trip (sign in, create, find, delete a note) and ran
+    it locally: PASS, with its video.
+  - A question that only mentioned flowreel started nothing, and an
+    unrelated question did not load the skill.
 - **Not yet checked:** a run of the skill inside Cursor or VS Code, other
   agents that read the format (Codex, Copilot CLI and so on), and
   installing it from a marketplace. Cursor's import from GitHub needs a
