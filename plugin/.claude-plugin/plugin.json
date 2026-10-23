@@ -16,5 +16,7 @@
     "video",
     "narration",
     "demo"
-  ]
+  ],
+  "documentationUrl": "https://github.com/Confidee/flowreel/blob/main/docs/plugin.md",
+  "supportUrl": "https://github.com/Confidee/flowreel/issues"
 }
