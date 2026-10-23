@@ -6,6 +6,14 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
+flowreel is now also a standard Agent Skill: one folder, `skills/flowreel/`,
+that Cursor, GitHub Copilot in VS Code, Claude Code and other agents that
+read the Agent Skills format can load. The Claude Code plugin and the npm
+package work as before; the README's "Use with any Agent Skills agent" says
+how to install the skill.
+
 ### Added
 
 - `skills/flowreel/`: flowreel as a standard
