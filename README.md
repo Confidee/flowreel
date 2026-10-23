@@ -150,6 +150,68 @@ for each OS.
 [docs/plugin.md](docs/plugin.md) lists every skill, agent and hook, and
 every command the plugin may run on your machine.
 
+### Use with any Agent Skills agent
+
+[`skills/flowreel/`](skills/flowreel/) is flowreel as a standard
+[Agent Skill](https://agentskills.io): one folder with a `SKILL.md` and
+its `references/` and `scripts/`, for any agent that reads the format. It
+covers the same workflows as the plugin (doctor, init, inventory, author,
+narrate, run, explain, demos). You ask for them in words, because there
+are no `/flowreel:*` commands, plugin agents or session-start check
+outside the plugin. In Claude Code, the plugin above is still the better
+choice.
+
+Get the folder from a release (0.5.0 or later; the
+[Releases](https://github.com/Confidee/flowreel/releases) page names the
+newest), then copy it to where your agent looks for skills:
+
+```bash
+git clone --depth 1 --branch v<version> https://github.com/Confidee/flowreel.git /tmp/flowreel-skill
+mkdir -p .claude/skills && cp -R /tmp/flowreel-skill/skills/flowreel .claude/skills/
+```
+
+`.claude/skills/` in your project works for all three agents below.
+Each also reads its own folders:
+
+| Agent                     | Project (this repository only)                                          | Personal (every project)                                         |
+| ------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Claude Code               | `.claude/skills/flowreel/`                                              | `~/.claude/skills/flowreel/`                                     |
+| Cursor                    | `.cursor/skills/`, `.agents/skills/` or `.claude/skills/` + `flowreel/` | `~/.cursor/skills/`, `~/.agents/skills/` or `~/.claude/skills/`  |
+| GitHub Copilot in VS Code | `.github/skills/`, `.agents/skills/` or `.claude/skills/` + `flowreel/` | `~/.copilot/skills/`, `~/.agents/skills/` or `~/.claude/skills/` |
+
+Then start a new chat and ask, for example, "set up flowreel in this
+project". In VS Code, **Open Customizations** in the Chat view lists the
+skill under **Skills**. Read `SKILL.md` before you rely on it, as you
+would for any skill you copy in.
+
+**What the plugin enforces and the skill can only ask for.** In the
+plugin, every workflow but explain starts only when you call it, and the
+two exploring agents can only read. The specification has no field for
+either, so the skill states both as rules the agent must follow:
+
+- start a workflow only when you ask for it;
+- only read while exploring an app or a run.
+
+An agent that ignores its instructions is not stopped by anything. Use
+the plugin where you can.
+
+What has been checked, and what has not:
+
+- **Checked:** `SKILL.md` follows the Agent Skills specification and
+  passes its reference validator (`skills-ref validate`). We targeted the
+  specification at commit
+  [`69ef37e`](https://github.com/agentskills/agentskills/tree/69ef37e9424c0a7ea9dd2293b559e43ec8176379)
+  (2026-08-09); it has no version number of its own. In CI, a stricter
+  check of our own runs on every change. The folders in the table come
+  from each agent's documentation, read on 2026-10-22 and 2026-10-23:
+  [Claude Code](https://code.claude.com/docs/en/skills),
+  [Cursor](https://cursor.com/docs/context/skills),
+  [VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills).
+- **Not yet checked:** a run of the skill inside Cursor or VS Code, other
+  agents that read the format (Codex, Copilot CLI and so on), and
+  installing it from a marketplace. Cursor's import from GitHub needs a
+  `.cursor-plugin/marketplace.json`, which this repository does not have.
+
 ### Without the plugin
 
 From npm:
@@ -214,6 +276,7 @@ with three flows and a narrated video.
 | `@confidee/flowreel`                                                | [runtime/](runtime/)                   | The engine: TypeScript, ESM, Node >= 20, peer `@playwright/test` >= 1.56                                                 |
 | `@confidee/flowreel/rails-inertia`, `@confidee/flowreel/mail-graph` | [runtime/](runtime/)                   | Optional stack adapters, as subpath exports: the Inertia props reader and the seam client; the Microsoft 365 mail driver |
 | `flowreel` Claude Code plugin                                       | [plugin/](plugin/)                     | Skills, agents and a read-only prerequisite check around the runtime                                                     |
+| `flowreel` Agent Skill                                              | [skills/flowreel/](skills/flowreel/)   | The plugin's workflows as one standard Agent Skill, for any agent that reads the format; generated from `plugin/`        |
 | Example app                                                         | [examples/minimal/](examples/minimal/) | A tiny notes app with three flows and a narrated video, no Rails                                                         |
 | Docs                                                                | [docs/](docs/)                         | The guides above, the architecture and the design decisions                                                              |
 

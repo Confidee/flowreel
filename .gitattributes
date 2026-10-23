@@ -1,0 +1,3 @@
+# The portable Agent Skill is checked byte for byte against what
+# scripts/sync-agent-skill.mjs generates: keep LF on every platform.
+skills/flowreel/** text eol=lf
