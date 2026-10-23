@@ -86,12 +86,39 @@ jobs:
       - name: Example - typecheck
         working-directory: examples/minimal
         run: npm run typecheck
-      - name: Example - Chromium and ffmpeg
+      # Chromium's system libraries and ffmpeg come from Ubuntu's mirror,
+      # which sometimes serves them at about 40 kB/s: the step then took up
+      # to 30 minutes (#34). apt keeps the .deb files it downloads in
+      # ~/apt-cache, saved per runner image and Playwright version, so on a
+      # cache hit nothing is downloaded from the mirror. The step's own
+      # limit makes a slow mirror on a cache miss fail early and clearly.
+      - name: Example - system package cache key
+        id: apt-key
         working-directory: examples/minimal
         run: |
+          echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+          echo "playwright=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Example - restore the system package cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-cache
+          key: apt-${{ steps.apt-key.outputs.image }}-playwright-${{ steps.apt-key.outputs.playwright }}
+          restore-keys: |
+            apt-${{ steps.apt-key.outputs.image }}-
+      - name: Example - Chromium and ffmpeg
+        working-directory: examples/minimal
+        timeout-minutes: 10
+        run: |
+          mkdir -p "$HOME/apt-cache/partial"
+          printf 'Dir::Cache::Archives "%s";\nAPT::Keep-Downloaded-Packages "true";\n' "$HOME/apt-cache" \
+            | sudo tee /etc/apt/apt.conf.d/99flowreel-cache > /dev/null
+          echo "cached packages before: $(find "$HOME/apt-cache" -maxdepth 1 -name '*.deb' | wc -l)"
           npx playwright install --with-deps chromium
           sudo apt-get install -y --no-install-recommends ffmpeg
           ffmpeg -hide_banner -encoders | grep -E 'libx264|aac'
+          # The cache action saves the folder as the runner user.
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/apt-cache"
+          echo "cached packages after: $(find "$HOME/apt-cache" -maxdepth 1 -name '*.deb' | wc -l)"
       # Narration is off on Linux (the only shipped voice is macOS `say`),
       # so the videos are silent; the verdict is the same.
       - name: Example - flows at qa pace
