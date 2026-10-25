@@ -70,8 +70,12 @@ customers, and any word the project's vocabulary guard forbids.
   rate `FLOWREEL_VOICE_RATE`, 90-360 words per minute, default 175).
   Without a Premium voice the run warns and uses a standard one. Clips are
   cached in `.flowreel/cache/voice` (`FLOWREEL_VOICE_CACHE_DIR`).
-- Narration is on by default at the tour's demo pace, off at qa pace and
-  for the round trip; `--narration on|off` overrides. The demo pace slows
+- Narration is off unless the user turns it on (`--narration on` or
+  `FLOWREEL_NARRATION=on`). Apple licenses the macOS voices for personal,
+  non-commercial use only (macOS licence §2F): before turning narration on
+  for a video meant for work, a client or the public, tell the user and
+  point at docs/narration-and-videos.md, "Voices and licensing". Never
+  turn it on by yourself. The demo pace slows
   the recording (never speeds it up) and the video waits for each line.
 - A narration problem never changes a verdict: the summary says
   `narration: not produced (<reason>)`.

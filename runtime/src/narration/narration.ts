@@ -76,13 +76,15 @@ export function settingHintName(key: string): string {
 }
 
 /**
- * FLOWREEL_NARRATION=off always disables narration, =on always enables it;
- * otherwise it is on at demo pace and off at qa pace and for the
- * release-gate round trip.
+ * Narration is off unless FLOWREEL_NARRATION=on turns it on, whatever the
+ * run and its pace: the only voices are the macOS system voices, which
+ * Apple licenses for personal, non-commercial use only (macOS licence
+ * §2F), so a video is never narrated with one by default.
+ * FLOWREEL_NARRATION=off is also honoured (it silences combined videos).
  */
 export function narrationDecision(
   env: Env,
-  run: { kind: VideoKind; pace: Pace },
+  _run: { kind: VideoKind; pace: Pace },
 ): NarrationDecision {
   const set = envVar(env, "NARRATION")
   const value = (set?.value ?? "").trim().toLowerCase()
@@ -90,15 +92,10 @@ export function narrationDecision(
     return { on: false, reason: `${set!.name}=off` }
   }
   if (ON.includes(value)) return { on: true }
-  if (run.kind === "round-trip") {
-    return {
-      on: false,
-      reason: `off for the round trip (${settingHintName("NARRATION")}=on turns it on)`,
-    }
+  return {
+    on: false,
+    reason: `off unless ${settingHintName("NARRATION")}=on (the macOS voices are licensed for personal, non-commercial use only)`,
   }
-  return run.pace === "demo"
-    ? { on: true }
-    : { on: false, reason: "off at qa pace" }
 }
 
 /** Narration forced off (FLOWREEL_NARRATION=off) also silences combined videos. */
@@ -142,7 +139,8 @@ export interface VideoPace {
  * pace (`pace`, else FLOWREEL_PACE, demo by default). A round trip has no
  * browser pace of its own: its video is composed at demo pace exactly when
  * it is narrated (FLOWREEL_NARRATION=on), else qa (long waits
- * fast-forwarded).
+ * fast-forwarded). Narration itself is off unless turned on
+ * (narrationDecision).
  */
 export function videoPaceFor(
   kind: VideoKind,

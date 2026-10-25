@@ -226,8 +226,23 @@ test.describe("the narrator", () => {
       expect(narrator?.seconds("Hello.")).toBe(2)
       expect(narrator?.seconds(undefined)).toBeNull()
       expect(narrator?.seconds("Unknown.")).toBeNull()
+      // Another engine's line carries no Apple notice.
       expect(narrationLine(outcome)).toBe(
         "narration: fake (1 lines, 1 synthesized, 0 cached; using the fallback voice)",
+      )
+      // A macOS voice's line always carries Apple's licence terms.
+      expect(
+        narrationLine({
+          produced: true,
+          engine: "macos",
+          voice: "Ava (Premium)",
+          warning: "using the fallback voice",
+          lines: 1,
+          synthesized: 1,
+          cached: 0,
+        }),
+      ).toBe(
+        "narration: Ava (Premium) (1 lines, 1 synthesized, 0 cached; using the fallback voice). Apple licenses the macOS voices for personal, non-commercial use only (macOS licence §2F); for work or public videos, ask Apple or use another voice.",
       )
     } finally {
       rmSync(dir, { recursive: true, force: true })

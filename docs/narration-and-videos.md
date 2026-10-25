@@ -18,7 +18,7 @@ Two rules hold throughout:
 - [What gets made](#what-gets-made)
 - [Pace, slow motion and holds](#pace-slow-motion-and-holds)
 - [Narration](#narration)
-- [Voices](#voices)
+- [Voices and licensing](#voices-and-licensing)
 - [Your video kit](#your-video-kit)
 - [Redaction and the privacy mask](#redaction-and-the-privacy-mask)
 - [The demos folder](#the-demos-folder)
@@ -76,10 +76,10 @@ where the cuts were made.
 
 ## Pace, slow motion and holds
 
-| Pace             | While the flow runs                          | In the video                                                                                                                    |
-| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `demo` (default) | browser slowMo 650 ms; `pause()` holds 1.8 s | every recorded piece plays at 1/`FLOWREEL_SLOW_FACTOR` speed (default 1.5, so two-thirds speed); never fast-forwarded; narrated |
-| `qa`             | no slowMo, no pauses                         | real time; any stretch longer than 20 s (a mail or status wait) is played faster, up to 20x, with a badge; silent               |
+| Pace             | While the flow runs                          | In the video                                                                                                                                         |
+| ---------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demo` (default) | browser slowMo 650 ms; `pause()` holds 1.8 s | every recorded piece plays at 1/`FLOWREEL_SLOW_FACTOR` speed (default 1.5, so two-thirds speed); never fast-forwarded; narrated when narration is on |
+| `qa`             | no slowMo, no pauses                         | real time; any stretch longer than 20 s (a mail or status wait) is played faster, up to 20x, with a badge; silent                                    |
 
 At demo pace a long wait plays in **real time** (not slowed down) with a
 "Waiting for the email to arrive…" badge, and the step's sentence gets one
@@ -103,11 +103,16 @@ after the last one, so a failure's end state is visible.
 
 ### When it is on
 
-| Run               | Default | Override                                                  |
-| ----------------- | ------- | --------------------------------------------------------- |
-| Tour at demo pace | on      | `--narration off` or `FLOWREEL_NARRATION=off`             |
-| Tour at qa pace   | off     | `--narration on` or `FLOWREEL_NARRATION=on`               |
-| Round trip        | off     | `--narration on`: the video is then composed at demo pace |
+Narration is **off unless you turn it on**, for every run: `--narration on`
+or `FLOWREEL_NARRATION=on`. The only voices flowreel ships with are the
+macOS system voices, and Apple licenses them for personal, non-commercial
+use only; see [Voices and licensing](#voices-and-licensing) before you turn
+narration on for a video you will use at work or share.
+
+| Run             | Default | Turn it on                                                |
+| --------------- | ------- | --------------------------------------------------------- |
+| Tour (any pace) | off     | `--narration on` or `FLOWREEL_NARRATION=on`               |
+| Round trip      | off     | `--narration on`: the video is then composed at demo pace |
 
 `FLOWREEL_NARRATION=off` also silences the combined pipeline video.
 
@@ -182,7 +187,18 @@ Before anything is spoken, these are removed, in this order:
 `narration.unspeakableParts(text)` names what a line contains that would be
 removed. Use it in a unit test over your curated lines.
 
-## Voices
+## Voices and licensing
+
+> **macOS voices are for personal, non-commercial use only.** Apple
+> licenses its system voices (Ava, Zoe, Samantha and the others) for your
+> own personal, non-commercial projects (macOS software licence, section
+> 2F). Narrating a video for work, for a client, or to publish or share
+> publicly is outside that licence, even for non-profit purposes. For those
+> uses, ask Apple for permission, or choose a voice whose licence allows
+> it, for example [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M)
+> (Apache-2.0) through your own `VoiceEngine` (below). flowreel uses a
+> macOS voice only when you turn narration on, and every run that does says
+> so in its log and in `summary.md`.
 
 | Platform  | Engine   | What happens                                                                                                                                                  |
 | --------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -319,7 +335,7 @@ copies them to your `DemoCatalogue.dir` (for example
 
 ```text
 flowreel-demos/latest/
-├── 00-<round trip>.mp4               the round trip (when narrated, i.e. demo pace)
+├── 00-<round trip>.mp4               the round trip (when narration is on: demo pace)
 ├── 01-area-A-<area title>.mp4        one per tour area, in order
 ├── 02-area-B-<area title>.mp4
 ├── NN-<full tour>.mp4                only from a run of every area

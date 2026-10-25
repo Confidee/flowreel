@@ -111,9 +111,20 @@ export async function prepareNarration(
   }
 }
 
-/** "narration: Ava (Premium) (n lines, m synthesized, k cached)" */
+/**
+ * Apple's terms for its system voices (macOS licence §2F), named wherever a
+ * run says it used one: the log line and summary.md.
+ */
+export const MACOS_VOICE_NOTICE =
+  "Apple licenses the macOS voices for personal, non-commercial use only (macOS licence §2F); for work or public videos, ask Apple or use another voice."
+
+/**
+ * "narration: Ava (Premium) (n lines, m synthesized, k cached)", followed by
+ * MACOS_VOICE_NOTICE when the macOS engine spoke.
+ */
 export function narrationLine(outcome: NarrationOutcome): string {
   if (!outcome.produced) return `narration: not produced (${outcome.reason})`
   const warning = outcome.warning ? `; ${outcome.warning}` : ""
-  return `narration: ${outcome.voice} (${outcome.lines} lines, ${outcome.synthesized} synthesized, ${outcome.cached} cached${warning})`
+  const notice = outcome.engine === "macos" ? `. ${MACOS_VOICE_NOTICE}` : ""
+  return `narration: ${outcome.voice} (${outcome.lines} lines, ${outcome.synthesized} synthesized, ${outcome.cached} cached${warning})${notice}`
 }

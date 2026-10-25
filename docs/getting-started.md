@@ -119,13 +119,19 @@ ffmpeg -hide_banner -encoders | grep -E ' aac |libx264'
 
 ### 1.5 A voice (optional, macOS only for now)
 
-**Why:** at demo pace a voice explains each step. On macOS flowreel uses the
-built-in `say` command with a downloaded high-quality voice. On other
+**Why:** with narration turned on, a voice explains each step. On macOS
+flowreel uses the built-in `say` command with a downloaded high-quality
+voice. On other
 platforms there is no voice engine yet, so the videos are silent and the
 summary says why. Piper and Azure Speech engines are designed for but not
 built.
 
-Please download a Premium voice once per Mac:
+**Optional, and for personal projects only.** Apple licenses its system
+voices for personal, non-commercial use only. Narration is off unless you
+turn it on; for a video you will use at work or share, read
+[Voices and licensing](narration-and-videos.md#voices-and-licensing) first.
+
+To narrate personal projects, download a Premium voice once per Mac:
 
 1. Open **System Settings → Accessibility → Read & Speak** (**Spoken
    Content** on older macOS).

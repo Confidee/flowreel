@@ -333,6 +333,12 @@ Expected on Linux and CI. The video is silent.
 **`FLOWREEL_VOICE "…" is not installed (say -v '?' lists the installed voices)`**
 Use the exact name from `say -v '?'`, for example `Zoe (Premium)`.
 
+**`… Apple licenses the macOS voices for personal, non-commercial use only …`**
+A run narrated with a macOS voice always says this, in the log and in
+`summary.md`. It is a reminder, not an error: use the video only for a
+personal, non-commercial project, or narrate it with a voice whose licence
+covers your use ([Voices and licensing](narration-and-videos.md#voices-and-licensing)).
+
 **`using fallback voice Samantha: install a Premium voice …`**
 Download a Premium voice (see
 [Getting started](getting-started.md#15-a-voice-optional-macos-only-for-now)).

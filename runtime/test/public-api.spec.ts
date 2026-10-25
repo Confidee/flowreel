@@ -195,6 +195,7 @@ const SURFACE: Record<string, string[]> = {
     "DEFAULT_RATE",
     "ENGINES",
     "FALLBACK_WARNING",
+    "MACOS_VOICE_NOTICE",
     "PREFERRED_VOICES",
     "cacheKey",
     "clipFormat",

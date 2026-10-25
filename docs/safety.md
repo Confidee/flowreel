@@ -157,13 +157,14 @@ and its specs pass. Seams you write yourself must keep them too:
 
 ## Videos and narration
 
-| Rule                                                                                                                                        | Why                                                                               |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Email cards redact reply and notify tokens, long plus tags, links and opaque strings, twice.                                                | Those tokens can thread a reply into a real record or open a portal.              |
-| Narration never speaks addresses, links, run ids, QA prefixes, long tokens or your own patterns.                                            | A video is shared more widely than a log.                                         |
-| On staging, table rows that do not belong to the run are blurred from their first frame, once your page fixture calls `installPrivacyMask`. | Staging can hold real people's data. Data minimisation applies to recordings too. |
-| Voice text is passed to tools as an argument array, never through a shell.                                                                  | A sentence must never become a command.                                           |
-| Demo videos are published automatically only from development runs. Staging runs are published on purpose.                                  | Demos should show seed data, not staging data.                                    |
+| Rule                                                                                                                                                                                   | Why                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Email cards redact reply and notify tokens, long plus tags, links and opaque strings, twice.                                                                                           | Those tokens can thread a reply into a real record or open a portal.                                                |
+| Narration never speaks addresses, links, run ids, QA prefixes, long tokens or your own patterns.                                                                                       | A video is shared more widely than a log.                                                                           |
+| Narration is off unless you turn it on, and a run narrated with a macOS voice says in its log and `summary.md` that Apple licenses those voices for personal, non-commercial use only. | Apple's licence (macOS §2F) excludes work, client and public videos; a default must never put a company outside it. |
+| On staging, table rows that do not belong to the run are blurred from their first frame, once your page fixture calls `installPrivacyMask`.                                            | Staging can hold real people's data. Data minimisation applies to recordings too.                                   |
+| Voice text is passed to tools as an argument array, never through a shell.                                                                                                             | A sentence must never become a command.                                                                             |
+| Demo videos are published automatically only from development runs. Staging runs are published on purpose.                                                                             | Demos should show seed data, not staging data.                                                                      |
 
 ## Results and retention
 

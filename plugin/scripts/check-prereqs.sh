@@ -314,9 +314,9 @@ if [ "$os" = "Darwin" ]; then
     premium="$(neutral "$say_path" -v '?' | grep -m 1 -i '(Premium)' | sed 's/[[:space:]]*[a-z][a-z]_[A-Z][A-Z].*//')"
     premium="$(clean "$premium" 48)"
     if [ -n "$premium" ]; then
-      ok "a Premium voice" "$premium"
+      ok "a Premium voice" "$premium; personal, non-commercial use only"
     else
-      media voice-only "a Premium voice" "narration falls back to a standard voice" "System Settings > Accessibility > Read & Speak (Spoken Content) > System voice > Manage Voices, download e.g. Ava (Premium)" "" "Steps"
+      media voice-only "a Premium voice" "narration falls back to a standard voice; Apple licenses macOS voices for personal, non-commercial use only" "System Settings > Accessibility > Read & Speak (Spoken Content) > System voice > Manage Voices, download e.g. Ava (Premium)" "" "Steps"
     fi
   else
     media voice-only "say" "narrates the demo videos; without it they are silent" "it ships with macOS as /usr/bin/say; make sure PATH includes /usr/bin" "" "Steps"

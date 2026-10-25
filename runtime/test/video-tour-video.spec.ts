@@ -165,7 +165,11 @@ test.describe("produceTourVideos, silent (qa pace)", () => {
     expect(outcome).toMatchObject({
       produced: true,
       pace: { pace: "qa", slowFactor: 1 },
-      narration: { produced: false, reason: "off at qa pace" },
+      narration: {
+        produced: false,
+        reason:
+          "off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only)",
+      },
     })
     if (!outcome.produced) throw new Error("not produced")
     expect(outcome.areas.map((a) => [a.area, a.path])).toEqual([
@@ -320,7 +324,11 @@ test.describe("produceTourVideos, silent (qa pace)", () => {
     expect(outcome).toMatchObject({
       produced: false,
       reason: "ffmpeg failed: fake ffmpeg refused | second line",
-      narration: { produced: false, reason: "off at qa pace" },
+      narration: {
+        produced: false,
+        reason:
+          "off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only)",
+      },
     })
   })
 
@@ -438,7 +446,8 @@ test.describe("produceTourVideos, nothing to make", () => {
 })
 
 test.describe("produceTourVideos, narrated", () => {
-  const demo = { FLOWREEL_PACE: "demo" }
+  // Narration is off unless turned on (the only voices are Apple's).
+  const demo = { FLOWREEL_PACE: "demo", FLOWREEL_NARRATION: "on" }
 
   test("every part carries a sound track and tour.json says what was said", async () => {
     media = installFakeMedia({ noAudio: "chapter" })

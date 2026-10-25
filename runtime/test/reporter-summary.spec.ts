@@ -612,7 +612,7 @@ test.describe("the round trip", () => {
         { runDir: h.dir, options: { automatic: true } },
       ])
       expect(h.lines).toContain(
-        "[example] pace: demo (slow factor 1.5); narration: Ava (3 lines, 1 synthesized, 2 cached)",
+        "[example] pace: demo (slow factor 1.5); narration: Ava (3 lines, 1 synthesized, 2 cached). Apple licenses the macOS voices for personal, non-commercial use only (macOS licence §2F); for work or public videos, ask Apple or use another voice.",
       )
       expect(h.lines).toContain("[example] demos: not updated (test)")
     } finally {

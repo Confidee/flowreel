@@ -13,6 +13,27 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
   Anthropic's plugin directory shows. Its README says where it works:
   everything in Claude Code; in claude.ai chat it can explain and plan, but
   not run anything.
+- `MACOS_VOICE_NOTICE` from `@confidee/flowreel/voice`: Apple's terms for
+  its system voices, which every narration line names when a macOS voice
+  spoke.
+
+### Changed
+
+- **BREAKING: narration is off unless you turn it on**, for every run
+  (`--narration on` or `FLOWREEL_NARRATION=on`). Before, a tour at demo
+  pace was narrated by default. flowreel's only built-in voices are the
+  macOS system voices, and Apple licenses them for personal, non-commercial
+  use only (macOS licence, section 2F): a work, client or public video is
+  outside that licence, so no video is narrated with one unless someone
+  chooses to. A run narrated with a macOS voice now says so in its log and
+  in `summary.md`. The docs explain the terms and the alternatives
+  ("Voices and licensing" in `docs/narration-and-videos.md`); the doctor's
+  check, the narrate and run skills and the example say the same.
+- The demo video (`assets/demo/flowreel-demo.mp4`, linked from the README
+  and the npm page) is re-voiced with Kokoro (Apache-2.0): the same lines
+  at the same moments, the picture unchanged. Its first version used the
+  macOS voice Ava. The README now shows the demo's thumbnail and links to
+  the file.
 
 ## [0.5.0] - 2026-10-23
 

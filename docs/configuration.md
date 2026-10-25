@@ -156,17 +156,17 @@ stage. See [Interrupting a run](pipeline-and-gates.md#interrupting-a-run).
 
 ### Pace, video and voice
 
-| Variable                   | Values                                        | Meaning                                                                                                   |
-| -------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `FLOWREEL_PACE`            | `demo` (default), `qa`                        | Tour pace. See [Concepts: pace](concepts.md#pace).                                                        |
-| `FLOWREEL_NARRATION`       | `on`/`1`/`true`/`yes`, `off`/`0`/`false`/`no` | Forces narration on or off. Unset: on for a tour at demo pace, off otherwise.                             |
-| `FLOWREEL_VIDEO`           | `off`/`0`/`false`/`no` disables               | The run videos. Default on.                                                                               |
-| `FLOWREEL_SLOW_FACTOR`     | 1 to 3 (default 1.5)                          | How much slower recordings play at demo pace. Anything outside the range uses the default.                |
-| `FLOWREEL_SLOW_MO`         | milliseconds                                  | Browser slowMo. The pipeline sets 300 with `--headed` when nothing else is set. Your config reads it.     |
-| `FLOWREEL_VOICE`           | an installed voice name                       | The exact macOS voice, for example `Zoe (Premium)`. Default: the best installed English voice.            |
-| `FLOWREEL_VOICE_RATE`      | 90 to 360 (default 175)                       | Words per minute. A value outside the range, or not a whole number, uses the default.                     |
-| `FLOWREEL_VOICE_ENGINE`    | `macos`, `none`                               | Default `macos` on macOS, `none` elsewhere. `piper` and `azure` are reserved and not built yet.           |
-| `FLOWREEL_VOICE_CACHE_DIR` | a path                                        | Where voice clips are cached. Default `.flowreel/cache/voice` under the working directory. Git-ignore it. |
+| Variable                   | Values                                        | Meaning                                                                                                                                                                                     |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FLOWREEL_PACE`            | `demo` (default), `qa`                        | Tour pace. See [Concepts: pace](concepts.md#pace).                                                                                                                                          |
+| `FLOWREEL_NARRATION`       | `on`/`1`/`true`/`yes`, `off`/`0`/`false`/`no` | Turns narration on or off. Unset: off. The macOS voices are licensed for personal, non-commercial use only ([Voices and licensing](narration-and-videos.md#voices-and-licensing)).          |
+| `FLOWREEL_VIDEO`           | `off`/`0`/`false`/`no` disables               | The run videos. Default on.                                                                                                                                                                 |
+| `FLOWREEL_SLOW_FACTOR`     | 1 to 3 (default 1.5)                          | How much slower recordings play at demo pace. Anything outside the range uses the default.                                                                                                  |
+| `FLOWREEL_SLOW_MO`         | milliseconds                                  | Browser slowMo. The pipeline sets 300 with `--headed` when nothing else is set. Your config reads it.                                                                                       |
+| `FLOWREEL_VOICE`           | an installed voice name                       | The exact macOS voice, for example `Zoe (Premium)`. Default: the best installed English voice. Personal, non-commercial use only ([licence](narration-and-videos.md#voices-and-licensing)). |
+| `FLOWREEL_VOICE_RATE`      | 90 to 360 (default 175)                       | Words per minute. A value outside the range, or not a whole number, uses the default.                                                                                                       |
+| `FLOWREEL_VOICE_ENGINE`    | `macos`, `none`                               | Default `macos` on macOS, `none` elsewhere. `piper` and `azure` are reserved and not built yet.                                                                                             |
+| `FLOWREEL_VOICE_CACHE_DIR` | a path                                        | Where voice clips are cached. Default `.flowreel/cache/voice` under the working directory. Git-ignore it.                                                                                   |
 
 ### Sessions
 

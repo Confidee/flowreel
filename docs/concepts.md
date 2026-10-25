@@ -204,10 +204,10 @@ is an error, so a typo never reaches the app.
 
 **Pace** sets how fast a tour runs and how its video plays:
 
-| Pace             | Browser                                                    | Video                                                                               |
-| ---------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `demo` (default) | slowMo 650 ms; `pause()` holds 1.8 s after a key assertion | plays at 1/1.5 speed; long waits play in real time with a "waiting" badge; narrated |
-| `qa`             | no slowMo, no pauses                                       | real time; long waits fast-forwarded (up to 20x); silent                            |
+| Pace             | Browser                                                    | Video                                                                                              |
+| ---------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `demo` (default) | slowMo 650 ms; `pause()` holds 1.8 s after a key assertion | plays at 1/1.5 speed; long waits play in real time with a "waiting" badge; narrated when turned on |
+| `qa`             | no slowMo, no pauses                                       | real time; long waits fast-forwarded (up to 20x); silent                                           |
 
 Use `qa` while writing and debugging, and `demo` for evidence and demos.
 A round trip has no browser pace. Its video is composed at demo pace when
@@ -220,9 +220,10 @@ title by default. Curated lines in `e2e/flowreel/narration/<module>.json`
 override it per step, per feature card, per email card and for the intro
 and outro. Addresses, links, run ids, QA subject prefixes, long opaque
 tokens and your own patterns (record numbers, internal ids) are removed
-before anything is spoken. Narration is on at demo pace for tours, off at
-qa pace, and off for the round trip unless you turn it on. See
-[Narration and videos](narration-and-videos.md).
+before anything is spoken. Narration is off unless you turn it on
+(`FLOWREEL_NARRATION=on`): the only voices are the macOS system voices,
+which Apple licenses for personal, non-commercial use only. See
+[Narration and videos](narration-and-videos.md#voices-and-licensing).
 
 ## Videos and demos
 
