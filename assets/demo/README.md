@@ -38,7 +38,9 @@ The opening, the plugin screen and the credits were made separately from
 HTML pages rendered frame by frame and joined to the recording with
 ffmpeg; they are not flowreel output.
 
-The README shows the thumbnail and links to the video file here.
+The README plays a copy of this video uploaded to GitHub, because GitHub
+plays a video in a README only from its own uploads; the file here is the
+original.
 
 The flowreel name and logo appear in the video; see
 [assets/brand](../brand/README.md) for how they may be used.
