@@ -150,7 +150,8 @@ test.describe("produceVideo", () => {
       durationSec: 42.3,
       narration: {
         produced: false,
-        reason: "off for the round trip (FLOWREEL_NARRATION=on turns it on)",
+        reason:
+          "off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only)",
       },
       pace: { pace: "qa", slowFactor: 1 },
     })

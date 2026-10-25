@@ -101,7 +101,7 @@ decision in the catalogue: never change it to reach staging.
   restores inside the test. A failed restore exits the run 4.
 - `pause()`: the demo pace's hold after a key assertion; nothing at qa pace.
   Never `waitForTimeout`.
-- `pace`: `"demo"` (slowMo, pauses, narrated) or `"qa"` (fast, silent).
+- `pace`: `"demo"` (slowMo, pauses; narrated when narration is on) or `"qa"` (fast, silent).
 - `inboundBudget.consume(what)`: before every mail the flow sends INTO the
   app; at most 3 per staging run (write-ahead; refuses the 4th).
 

@@ -11,7 +11,7 @@ never depends on them).
 | `@playwright/test` >= 1.56 (in the project)                     | runs and records the flows                 | yes               | `npm i -D @playwright/test`                        | same                                                      |
 | Playwright Chromium                                             | the browser that is recorded               | yes               | `npx playwright install chromium`                  | `npx playwright install --with-deps chromium` (uses sudo) |
 | ffmpeg + ffprobe with `libx264` and `aac`                       | composes MP4s, mixes audio, measures clips | for videos        | `brew install ffmpeg`                              | `sudo apt install ffmpeg`                                 |
-| macOS `say` + a Premium voice (e.g. "Ava (Premium)")            | narration                                  | for voice (macOS) | System Settings (below)                            | not available yet: videos are silent                      |
+| macOS `say` + a Premium voice (e.g. "Ava (Premium)")            | narration (personal use only)              | for voice (macOS) | System Settings (below)                            | not available yet: videos are silent                      |
 | `psql`                                                          | a Postgres per-run database copy           | optional          | `brew install libpq && brew link --force libpq`    | `sudo apt install postgresql-client`                      |
 | A Microsoft Graph app (Mail.ReadWrite + Mail.Send, one mailbox) | real mail checks on staging (`mail-graph`) | optional          | tenant admin steps in the mail-graph adapter guide | same                                                      |
 
@@ -44,7 +44,10 @@ never depends on them).
 - **ffmpeg.** Homebrew's and most distributions' builds include `libx264`
   and `aac`. A minimal build without them makes runs report
   `video: not produced (<reason>)`.
-- **Premium voice (macOS).** System Settings > Accessibility > Read & Speak
+- **Premium voice (macOS), for personal projects only.** Apple licenses its
+  system voices for personal, non-commercial use only (macOS licence §2F);
+  narration is off unless the user turns it on. Say so whenever this item
+  comes up. To install: System Settings > Accessibility > Read & Speak
   (older macOS: Spoken Content) > System voice > Manage Voices… > English >
   download "Ava (Premium)" (or "Zoe (Premium)", "Jamie (Premium)"). Then
   `say -v '?' | grep Premium` lists it. `FLOWREEL_VOICE` picks an exact

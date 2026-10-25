@@ -3,7 +3,7 @@
 The quickest way to see flowreel work. A tiny notes app (plain HTML and a
 little JavaScript, served by a Node server with no dependencies), three
 flows and one command. The command produces a pass/fail report and a
-narrated, branded MP4 of every step.
+branded MP4 of every step, narrated when you turn narration on.
 
 It uses no Rails, no Inertia and no mail: only the flowreel core over a web
 app. The same pieces drive larger projects.
@@ -22,11 +22,14 @@ You need:
   libatk and others): run `npx playwright install --with-deps chromium`
   instead, which installs them with `sudo apt`, or run
   `sudo npx playwright install-deps chromium` after the plain install.
-- Optional: a macOS Premium voice for the narration. Open System Settings,
-  then Accessibility, then Read & Speak (Spoken Content on older macOS),
-  then System Voice, then Manage Voices, and download an English Premium
-  voice such as Ava. Without one the run falls back to Samantha; off macOS
-  the video is silent.
+- Optional, for personal projects only: a macOS Premium voice for the
+  narration. Apple licenses its system voices for personal, non-commercial
+  use only ([Voices and licensing](../../docs/narration-and-videos.md#voices-and-licensing)),
+  so narration is off unless you turn it on (`FLOWREEL_NARRATION=on`). Open
+  System Settings, then Accessibility, then Read & Speak (Spoken Content on
+  older macOS), then System Voice, then Manage Voices, and download an
+  English Premium voice such as Ava. Without one the run falls back to
+  Samantha; off macOS the video is silent.
 
 In Claude Code, `/flowreel:doctor` checks all of these and offers the
 install commands. Install the plugin first to get that command (see
@@ -76,8 +79,8 @@ Running 4 tests using 1 worker
 
   4 passed (27.7s)
 [notes] PASS: 3 tour feature(s) verified. Summary: flowreel-results/loc-…/summary.md
-[notes] video: flowreel-results/loc-…/notes-tour-loc-….mp4 (88.3s)
-[notes] pace: demo (slow factor 1.5); narration: Ava (Premium) (19 lines, 19 synthesized, 0 cached)
+[notes] video: flowreel-results/loc-…/notes-tour-loc-….mp4 (…s)
+[notes] pace: demo (slow factor 1.5); narration: not produced (off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only))
 [notes] area A video: flowreel-results/loc-…/tour-a-loc-….mp4 (83.6s)
 ```
 
@@ -106,15 +109,15 @@ when the run ends. Even so, share only `summary.md`.
 | Command                                              | What changes                                                                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `FLOWREEL_PACE=qa npx playwright test`               | As fast as the app allows; a shorter, silent video                                                            |
-| `FLOWREEL_NARRATION=off npx playwright test`         | Demo pace, no voice                                                                                           |
+| `FLOWREEL_NARRATION=on npx playwright test`          | Narrated with a macOS voice: for personal, non-commercial projects only (Apple's licence); the log says so    |
 | `FLOWREEL_VOICE_ENGINE=none npx playwright test`     | What a machine without macOS `say` makes: the same features, silent and shorter (no spoken lines to wait for) |
 | `FLOWREEL_VOICE="Zoe (Premium)" npx playwright test` | Another installed voice (`say -v '?'` lists them)                                                             |
 | `FLOWREEL_VIDEO=off npx playwright test`             | No recording and no video, only the report                                                                    |
 | `FLOWREEL_LOCAL_PORT=3171 npx playwright test`       | Another port (3170 to 3199)                                                                                   |
 | `FLOWREEL_TARGET=staging npx playwright test`        | Refused before any request: this example lists no staging origin                                              |
 
-Narration clips are cached in `.flowreel/cache/voice/`, so a second run
-reuses them ("19 cached"). Without a Premium or Enhanced English voice the
+Narration clips are cached in `.flowreel/cache/voice/`, so a second
+narrated run reuses them ("19 cached"). Without a Premium or Enhanced English voice the
 run falls back to Samantha and says so (see the prerequisites above to
 install one).
 

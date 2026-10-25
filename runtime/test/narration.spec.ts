@@ -517,20 +517,20 @@ test.describe("card lines", () => {
 })
 
 test.describe("on / off, pace and slow factor", () => {
-  test("on at demo pace, off at qa pace and for the round trip, env wins", () => {
-    expect(narrationDecision({}, { kind: "tour", pace: "demo" })).toEqual({
-      on: true,
-    })
-    expect(narrationDecision({}, { kind: "tour", pace: "qa" })).toEqual({
+  test("off unless turned on: the only voices are Apple's, licensed for personal use (Apple licence §2F)", () => {
+    const off = {
       on: false,
-      reason: "off at qa pace",
-    })
-    expect(narrationDecision({}, { kind: "round-trip", pace: "demo" })).toEqual(
-      {
-        on: false,
-        reason: "off for the round trip (FLOWREEL_NARRATION=on turns it on)",
-      },
-    )
+      reason:
+        "off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only)",
+    }
+    for (const run of [
+      { kind: "tour", pace: "demo" },
+      { kind: "tour", pace: "qa" },
+      { kind: "round-trip", pace: "demo" },
+      { kind: "round-trip", pace: "qa" },
+    ] as const) {
+      expect(narrationDecision({}, run), `${run.kind} ${run.pace}`).toEqual(off)
+    }
     expect(
       narrationDecision(
         { FLOWREEL_NARRATION: "on" },
@@ -569,6 +569,7 @@ test.describe("on / off, pace and slow factor", () => {
     expect(videoPaceFor("tour", {})).toMatchObject({
       pace: "demo",
       slowFactor: 1.5,
+      narration: { on: false },
     })
     expect(videoPaceFor("tour", { FLOWREEL_PACE: "qa" })).toMatchObject({
       pace: "qa",
@@ -577,8 +578,11 @@ test.describe("on / off, pace and slow factor", () => {
     })
     // An explicit pace wins over the environment.
     expect(videoPaceFor("tour", { FLOWREEL_PACE: "qa" }, "demo")).toMatchObject(
-      { pace: "demo", narration: { on: true } },
+      { pace: "demo", narration: { on: false } },
     )
+    expect(
+      videoPaceFor("tour", { FLOWREEL_NARRATION: "on" }, "demo"),
+    ).toMatchObject({ pace: "demo", narration: { on: true } })
     expect(videoPaceFor("round-trip", {})).toMatchObject({
       pace: "qa",
       slowFactor: 1,

@@ -19,8 +19,16 @@ A 76-second narrated demo of flowreel, shown at the top of the
 4. Credits and where to start.
 
 The recording in part 3 is a real flowreel run: `@confidee/flowreel` 0.2.0
-installed from npm, the demo pace, narration with the macOS voice Ava
-(Premium). The run passed every step; its report is
+installed from npm, at the demo pace.
+
+**The sound.** The video was first narrated with the macOS voice Ava
+(Premium). Apple licenses its system voices for personal, non-commercial use
+only (macOS licence, section 2F), so on 2026-10-25 the whole soundtrack was
+re-voiced with [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (voice
+`af_heart`; Apache-2.0 weights, trained on permissively licensed audio): the
+same 13 lines at the same moments, loudness-matched, with the picture
+unchanged frame for frame. The run report below is kept exactly as flowreel
+wrote it, so it still names the original voice. The run passed every step; its report is
 [run/summary.md](run/summary.md), as flowreel wrote it. The report's
 evidence links (the HTML report, traces, screenshots) point to files that
 stay on the machine that ran it: traces hold session cookies, so flowreel's
@@ -30,9 +38,7 @@ The opening, the plugin screen and the credits were made separately from
 HTML pages rendered frame by frame and joined to the recording with
 ffmpeg; they are not flowreel output.
 
-The README plays a copy of the video uploaded to GitHub, because GitHub
-plays a video in a README only from its own uploads; the file here is the
-original.
+The README shows the thumbnail and links to the video file here.
 
 The flowreel name and logo appear in the video; see
 [assets/brand](../brand/README.md) for how they may be used.

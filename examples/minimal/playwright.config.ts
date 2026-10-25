@@ -21,7 +21,7 @@ import config, { TOUR_MODULE } from "./flowreel.config"
 // projects: tour-setup (proves the personas) and tour-a (area A's three
 // features, at the run's pace). The Notes server is started for the run.
 //
-//   npx playwright test                       demo pace, narrated on macOS
+//   npx playwright test                       demo pace, silent (FLOWREEL_NARRATION=on narrates)
 //   FLOWREEL_PACE=qa npx playwright test      as fast as the app allows
 //   FLOWREEL_VIDEO=off npx playwright test    no video at all
 

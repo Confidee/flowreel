@@ -30,10 +30,11 @@ you three things:
 You record the flow once and get the regression test, the release evidence
 and the demo or training video from it.
 
-https://github.com/user-attachments/assets/20bc4bce-5bbb-41f6-89c2-beca76e2eb05
+[![Watch the 76-second flowreel demo (sound on)](assets/demo/flowreel-demo-thumbnail.jpg)](assets/demo/flowreel-demo.mp4)
 
 <sub>A 76-second demo, sound on: flowreel records one flow of a small demo
-app, narrated, with a caption and a verdict per step. The video, its
+app, with a caption and a verdict per step, narrated with
+[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0). The video, its
 thumbnail and the run's report are in [assets/demo](assets/demo/README.md).</sub>
 
 > **Status: 0.x** (APIs may still change between minor versions). The APIs
@@ -68,9 +69,9 @@ You type `/flowreel:run checkout` in Claude Code, or
 4. **The video.** An MP4 at 1920x1080. A title card, then your app with a
    caption bar per step ("Checkout · The customer pays with a saved card ·
    Passed"), email cards where mail moved, and an outro listing every step.
-   For a feature tour at demo pace, a voice explains each step and the
-   picture holds until the sentence ends. A round trip like `checkout` is
-   silent unless you turn narration on (`FLOWREEL_NARRATION=on`).
+   With narration turned on (`FLOWREEL_NARRATION=on`), a voice explains
+   each step and the picture holds until the sentence ends; otherwise the
+   video is silent.
 
 If something fails, `/flowreel:explain` reads the summary and the trace and
 tells you in plain language which step broke and why. It may suggest a
@@ -101,9 +102,11 @@ locator fix. It never edits an assertion.
   `CardCopy`. Email cards redact reply tokens and links. On staging, a
   privacy mask you install on the recorded page blurs table rows that do
   not belong to the run.
-- **Narration.** In a feature tour at demo pace, every step is spoken by
-  default from its own title (round trips and qa pace are silent unless
-  you turn narration on). You can add curated lines per step. Addresses,
+- **Narration**, off unless you turn it on (`FLOWREEL_NARRATION=on`).
+  Every step is then spoken from its own title, and you can add curated
+  lines per step. The built-in voices are the macOS system voices, which
+  Apple licenses for personal, non-commercial use only; for work or public
+  videos, see [Voices and licensing](docs/narration-and-videos.md#voices-and-licensing). Addresses,
   links, run ids and tokens are never spoken. Clips are cached, so a re-run
   only synthesizes the lines that changed.
 - **Demos folder.** After a passing demo-pace development run, the videos

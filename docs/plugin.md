@@ -165,7 +165,7 @@ command before it runs.
 | `readlink` of a resolved tool                           | is it a version-manager shim (then it is not run, and reported `unchecked`)                      |
 | `command -v ffmpeg`, `ffmpeg -hide_banner -encoders`    | ffmpeg with `libx264` and `aac` (videos only)                                                    |
 | `command -v ffprobe`                                    | ffprobe present (videos only)                                                                    |
-| `command -v say`, `say -v '?'`                          | macOS only: is a Premium voice installed (narration only)                                        |
+| `command -v say`, `say -v '?'`                          | macOS only: is a Premium voice installed (narration only; personal, non-commercial use)          |
 | `command -v psql`                                       | optional: Postgres client for per-run databases                                                  |
 | `tr`, `cut`, `head`, `sed`, `basename`, `printf`        | only to shorten and clean what the script prints                                                 |
 

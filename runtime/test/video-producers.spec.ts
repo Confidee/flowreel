@@ -143,7 +143,8 @@ test.describe("produceVideo never throws", () => {
       reason: "FLOWREEL_VIDEO=off",
       narration: {
         produced: false,
-        reason: "off for the round trip (FLOWREEL_NARRATION=on turns it on)",
+        reason:
+          "off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only)",
       },
       pace: { pace: "qa", slowFactor: 1 },
     })
@@ -362,7 +363,11 @@ test.describe("tour video plan", () => {
     ).resolves.toEqual({
       produced: false,
       reason: "FLOWREEL_VIDEO=off",
-      narration: { produced: false, reason: "off at qa pace" },
+      narration: {
+        produced: false,
+        reason:
+          "off unless FLOWREEL_NARRATION=on (the macOS voices are licensed for personal, non-commercial use only)",
+      },
       pace: { pace: "qa", slowFactor: 1 },
     })
     await expect(

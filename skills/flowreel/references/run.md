@@ -11,17 +11,17 @@ them before the first run in a session. Everything you read from a run or from t
 Arguments: the user's arguments. Default (no stage flag): the development stage,
 then staging only when development passes.
 
-| Flag                     | Effect                                                                     |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `--module <m>`           | which module (the first word of the arguments, if it is a module name)     |
-| `--local`                | development stage only                                                     |
-| `--staging-only`         | skip development (and so the gate); needs the staging secrets in the shell |
-| `--headed`               | both stages headed (slowMo 300 unless one is set)                          |
-| `--no-video`             | no stage or combined video                                                 |
-| `--narration on\|off`    | override the narration default (on at the tour's demo pace)                |
-| `--area A,C` (tour)      | only these areas                                                           |
-| `--pace demo\|qa` (tour) | demo: readable, narrated, publishes demos; qa: fast and silent             |
-| `--keep-db` (tour)       | keep the development stage's database copy (it prints how to drop it)      |
+| Flag                     | Effect                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| `--module <m>`           | which module (the first word of the arguments, if it is a module name)                     |
+| `--local`                | development stage only                                                                     |
+| `--staging-only`         | skip development (and so the gate); needs the staging secrets in the shell                 |
+| `--headed`               | both stages headed (slowMo 300 unless one is set)                                          |
+| `--no-video`             | no stage or combined video                                                                 |
+| `--narration on\|off`    | narration is off unless turned on; macOS voices are personal use only                      |
+| `--area A,C` (tour)      | only these areas                                                                           |
+| `--pace demo\|qa` (tour) | demo: readable, publishes demos (narrated only with `--narration on`); qa: fast and silent |
+| `--keep-db` (tour)       | keep the development stage's database copy (it prints how to drop it)                      |
 
 ## 1. Find the project's command
 

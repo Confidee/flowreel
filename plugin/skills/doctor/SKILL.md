@@ -53,8 +53,9 @@ it) are in [reference/prerequisites.md](reference/prerequisites.md); read
 it when the user asks or an item is missing.
 
 Say plainly what is optional: without ffmpeg there are no videos, but every
-verdict still works; without a Premium voice narration falls back to a
-standard voice; off macOS videos are silent; psql is only for a Postgres
+verdict still works; narration is off unless turned on, and the macOS
+voices it uses are licensed by Apple for personal, non-commercial use only;
+without a Premium voice narration falls back to a standard voice; off macOS videos are silent; psql is only for a Postgres
 per-run database copy.
 
 Node.js is checked against what the project needs: the runtime is
