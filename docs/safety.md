@@ -219,3 +219,8 @@ flowreel cannot check these for you:
   register with its compensating controls.
 - Register the accounts, the mail app and its credential in your asset
   inventory, each with an owner.
+- You need the rights to the voice you narrate with. Apple licenses the
+  macOS voices for personal, non-commercial use only (macOS licence §2F).
+  flowreel says in the log and `summary.md` when a run used one, but
+  whether you may use the video is yours to check. See
+  [Voices and licensing](narration-and-videos.md#voices-and-licensing).
