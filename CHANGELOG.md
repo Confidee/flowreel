@@ -6,7 +6,24 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Added
+
+- A privacy policy, [PRIVACY.md](PRIVACY.md): nothing is sent to the
+  maintainers; run results stay on your machine; the services flowreel
+  connects to. The plugin links it (`privacyPolicyUrl`) and its README has
+  a "Privacy and network" section.
+
 ### Changed
+
+- The plugin README no longer says it "never sends anything anywhere": it
+  lists the services a run or setup connects to.
+- The plugin README says, beside its skills, that narration is off unless
+  turned on and that Apple licenses the macOS voices for personal,
+  non-commercial use only.
+- The safety page's "Your responsibilities" adds the voice: you need the
+  rights to the voice you narrate with.
+- The README's License section points to the licence's disclaimer of
+  warranty and limitation of liability (sections 7 and 8).
 
 - The README plays the demo video inline again: the Kokoro version (0.6.0),
   uploaded to GitHub, which plays a README video only from its own uploads.

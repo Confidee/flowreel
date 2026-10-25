@@ -53,6 +53,11 @@ To try it from a clone without installing: `claude --plugin-dir plugin`
 | `/flowreel:explain`   | you or Claude | reads a finished run, classifies each failure, proposes locator-only fixes              | none                                                                                                                                                |
 | `/flowreel:demos`     | you only      | publishes a demo-pace run's videos to `latest/`                                         | copies files after you confirm                                                                                                                      |
 
+> **Narration is off unless you turn it on.** The built-in voices are the
+> macOS system voices, which Apple licenses for personal, non-commercial
+> use only; for work or public videos, see
+> [Voices and licensing](https://github.com/Confidee/flowreel/blob/main/docs/narration-and-videos.md#voices-and-licensing).
+
 | Agent             | Tools                                              | Model  | Used by               |
 | ----------------- | -------------------------------------------------- | ------ | --------------------- |
 | `flow-author`     | Read, Glob, Grep, Edit, Write, Bash (unrestricted) | sonnet | `/flowreel:author`    |
@@ -121,8 +126,23 @@ and the skills ask in the conversation first:
 | `open <video or folder>` (macOS), `npx playwright show-report <dir>`, `npx playwright show-trace <zip>`                          | run, explain (when you ask)                  |
 
 The plugin never runs `git commit`, push, branch, stash or reset, never
-reads `.env*` files or the project's secrets file, and never sends anything
-anywhere: there is no telemetry.
+reads `.env*` files or the project's secrets file, and has no telemetry.
+
+## Privacy and network
+
+Nothing is sent to flowreel's maintainers. flowreel connects only to services you
+configure or approve:
+
+- your local and staging app, when a flow runs;
+- your mail provider, if configured (Microsoft 365:
+  `login.microsoftonline.com`, `graph.microsoft.com`);
+- a voice provider, if you add one (the built-in macOS voice is local);
+- during setup, after a yes: the npm registry and Playwright's browser
+  download.
+
+Run results (traces, screenshots, videos, saved emails) stay on your
+machine and can contain personal data from the environment you tested.
+See the [Privacy policy](https://github.com/Confidee/flowreel/blob/main/PRIVACY.md).
 
 ## Requirements
 

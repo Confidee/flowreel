@@ -313,6 +313,8 @@ adapter like any other project.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+flowreel is provided as is, without warranty or liability (LICENSE,
+sections 7 and 8).
 Copyright 2026 Confidee GmbH. Created and maintained by Feti Jashari.
 
 The flowreel name and logo belong to Confidee GmbH and are not licensed
