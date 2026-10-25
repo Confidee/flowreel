@@ -1,6 +1,6 @@
 {
   "name": "@confidee/flowreel",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Deterministic Playwright flows that double as narrated, branded videos, with a development-then-staging release gate.",
   "license": "Apache-2.0",
   "author": "Feti Jashari",

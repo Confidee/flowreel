@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-25
+
+Narration is now off unless you turn it on. flowreel's built-in voices are
+the macOS system voices, which Apple licenses for personal, non-commercial
+use only, so no video is narrated with one by default, and a run that uses
+one says so. The demo video is re-voiced with Kokoro (Apache-2.0). Also:
+the plugin is ready for Anthropic's plugin directory, and the README records
+the Agent Skill's run in Claude Code without the plugin.
+
 ### Added
 
 - The plugin has an icon (`plugin/.claude-plugin/icon.png`, the brand
