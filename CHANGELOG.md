@@ -6,6 +6,11 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ## [Unreleased]
 
+### Changed
+
+- The README plays the demo video inline again: the Kokoro version (0.6.0),
+  uploaded to GitHub, which plays a README video only from its own uploads.
+
 ## [0.6.0] - 2026-10-25
 
 Narration is now off unless you turn it on. flowreel's built-in voices are

@@ -30,7 +30,7 @@ you three things:
 You record the flow once and get the regression test, the release evidence
 and the demo or training video from it.
 
-[![Watch the 76-second flowreel demo (sound on)](assets/demo/flowreel-demo-thumbnail.jpg)](assets/demo/flowreel-demo.mp4)
+https://github.com/user-attachments/assets/1aea798d-8d1b-4121-ad30-244d1b84480d
 
 <sub>A 76-second demo, sound on: flowreel records one flow of a small demo
 app, with a caption and a verdict per step, narrated with
