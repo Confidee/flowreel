@@ -15,14 +15,10 @@
 #   or to the CIO when the Senior Software Engineer is the assignee. Overdue ones
 #   also get the label nc-overdue.
 #
-# Pinned copy of the reusable workflow
-#   org-workflows/.github/workflows/nonconformity-check.yml
-# (the organization's private shared-workflows repository), commit
-# 08316249ecc4ae8cc4bfde0773771cfecb65bca1
-# (the merge commit of the PR that added it). This
-# repository is public and cannot call a private reusable workflow, so the
-# logic is copied and the triggers and logins are set inline. Update it by hand
-# when the source changes.
+# Pinned copy of a reusable workflow kept in a private repository; source
+# commit 08316249ecc4ae8cc4bfde0773771cfecb65bca1. This repository is public and
+# cannot call a private reusable workflow, so the logic is copied and the
+# triggers and logins are set inline. Update it by hand when the source changes.
 name: Nonconformity check
 
 on:
