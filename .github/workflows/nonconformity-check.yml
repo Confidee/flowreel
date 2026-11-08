@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Nonconformity bugs (SDLC Policy section 6, ISO 27001 clause 10.2).
+# - Ordinary bugs are not checked: an empty Nonconformity field counts as "No".
+# - A bug marked P2 (minor) or P1 (major) cannot be closed as completed
+#   without an assignee (owner), Root cause, Target date and a corrective action;
+#   it is reopened with a comment saying what is missing (sections 6.2 and 6.3).
+#   The corrective action is the "Corrective action" field; failing that, the
+#   "Corrective action" section of a merged PR linked to the bug, or a comment on
+#   the bug starting "Corrective action".
+# - When such a PR is merged, its Corrective action section is copied to the bug
+#   as a comment, so the bug holds the record.
+# - Every weekday, open nonconformities that are overdue, or high severity
+#   (P1, major), are escalated (section 6.3): to the Senior Software Engineer,
+#   or to the CIO when the Senior Software Engineer is the assignee. Overdue ones
+#   also get the label nc-overdue.
+#
+# Pinned copy of a reusable workflow kept in a private repository; source commit 08316249ecc4ae8cc4bfde0773771cfecb65bca1.
+# This repository is public and cannot call a private reusable workflow, so the
+# logic is copied and the triggers and logins are set inline.
+name: Nonconformity check
+
+on:
+  issues:
+    types: [closed]
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "0 6 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  on-close:
+    if: github.event_name == 'issues' && github.event.issue.state_reason == 'completed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const section = (body) => {
+              const m = (body || '').replace(/\r\n/g, '\n').match(/^#{2,3}[ \t]*Corrective action[^\n]*\n([\s\S]*?)(?=^#{1,3}[ \t]|(?![\s\S]))/im);
+              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '&lt;!--').trim() : '';
+            };
+            const q = `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){
+              issueType{name}
+              assignees(first:1){totalCount}
+              closedByPullRequestsReferences(first:50,includeClosedPrs:true){nodes{merged body}}
+              issueFieldValues(first:20){nodes{
+                ... on IssueFieldTextValue{value field{... on IssueFieldText{name}}}
+                ... on IssueFieldSingleSelectValue{name field{... on IssueFieldSingleSelect{name}}}
+                ... on IssueFieldDateValue{value field{... on IssueFieldDate{name}}}
+              }}}}}`;
+            const { owner, repo } = context.repo;
+            const n = context.payload.issue.number;
+            const res = await github.graphql(q, { o: owner, r: repo, n });
+            const issue = res.repository.issue;
+            if (issue.issueType?.name !== 'Bug') return;
+            const f = {};
+            for (const v of issue.issueFieldValues.nodes) if (v.field?.name) f[v.field.name] = (v.value ?? v.name ?? '').trim();
+            const nc = f['Nonconformity'] || 'No';
+            if (nc === 'No') return;
+            const missing = [];
+            if (!issue.assignees.totalCount) missing.push('Assignee (owner)');
+            if (!f['Root cause']) missing.push('Root cause');
+            if (!f['Target date']) missing.push('Target date');
+            const fromField = !!f['Corrective action'];
+            const fromPr = !fromField && issue.closedByPullRequestsReferences.nodes.some(p => p.merged && section(p.body));
+            let fromComment = false;
+            if (!fromField && !fromPr) {
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: n, per_page: 100 });
+              // A comment counts only with text after the heading; a bare "Corrective action" does not.
+              const hasAction = (b) => {
+                const m = (b || '').match(/^\s*(?:<!--[\s\S]*?-->\s*)?\**Corrective action\**[ \t]*:?\**[ \t]*(?:\(from PR #\d+\))?\**:?([\s\S]*)$/i);
+                return !!m && m[1].replace(/<!--[\s\S]*?-->/g, '').trim().length > 0;
+              };
+              fromComment = comments.some(c => hasAction(c.body));
+            }
+            if (!fromField && !fromPr && !fromComment) missing.push('Corrective action');
+            if (!missing.length) return;
+            await github.rest.issues.update({ owner, repo, issue_number: n, state: 'open' });
+            await github.rest.issues.createComment({ owner, repo, issue_number: n,
+              body: `Reopened: this bug is marked as a nonconformity. Fill in ${missing.join(', ')} before closing it (SDLC Policy, section 6).` });
+
+  on-merge:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const section = (body) => {
+              const m = (body || '').replace(/\r\n/g, '\n').match(/^#{2,3}[ \t]*Corrective action[^\n]*\n([\s\S]*?)(?=^#{1,3}[ \t]|(?![\s\S]))/im);
+              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '&lt;!--').trim() : '';
+            };
+            const pr = context.payload.pull_request;
+            const text = section(pr.body);
+            if (!text) return;
+            const { owner, repo } = context.repo;
+            const q = `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
+              closingIssuesReferences(first:50){nodes{number repository{nameWithOwner} issueType{name}
+                issueFieldValues(first:20){nodes{
+                  ... on IssueFieldSingleSelectValue{name field{... on IssueFieldSingleSelect{name}}}
+                }}}}}}}`;
+            const res = await github.graphql(q, { o: owner, r: repo, n: pr.number });
+            const MARKER = `<!-- nc-corrective-action pr:${pr.number} -->`;
+            for (const i of res.repository.pullRequest.closingIssuesReferences.nodes) {
+              if (i.repository.nameWithOwner !== `${owner}/${repo}`) continue;
+              if (i.issueType?.name !== 'Bug') continue;
+              const nc = (i.issueFieldValues.nodes.find(v => v.field?.name === 'Nonconformity') || {}).name || 'No';
+              if (nc === 'No') continue;
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: i.number, per_page: 100 });
+              if (comments.some(c => c.user?.type === 'Bot' && c.user?.login === 'github-actions[bot]' && (c.body || '').includes(MARKER))) continue;
+              await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
+                body: `${MARKER}\n**Corrective action** (from PR #${pr.number}):\n\n${text}` });
+            }
+
+  escalate:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # One run at a time, so two runs cannot both post the same escalation comment.
+    concurrency:
+      group: nonconformity-escalation
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          SENIOR_ENGINEER_LOGIN: fetijashari
+          CIO_LOGIN: robkurti
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const today = new Date().toISOString().slice(0, 10);
+            // Escalate to the Senior Software Engineer; if he owns the bug, to the CIO.
+            const SSE = process.env.SENIOR_ENGINEER_LOGIN, CIO = process.env.CIO_LOGIN;
+            const escalateTo = (assignees) => assignees.includes(SSE)
+              ? `@${CIO} (CIO)` : `@${SSE} (Senior Software Engineer)`;
+            const OVERDUE = '<!-- nc-overdue-escalation -->';
+            const MAJOR = '<!-- nc-major-escalation -->';
+            const q = `query($o:String!,$r:String!,$c:String){repository(owner:$o,name:$r){issues(states:OPEN,first:100,after:$c){
+              pageInfo{hasNextPage endCursor}
+              nodes{number issueType{name} labels(first:50){nodes{name}} assignees(first:10){nodes{login}}
+                issueFieldValues(first:20){nodes{
+                  ... on IssueFieldSingleSelectValue{name field{... on IssueFieldSingleSelect{name}}}
+                  ... on IssueFieldDateValue{value field{... on IssueFieldDate{name}}}
+                }}}}}}`;
+            let cursor = null;
+            do {
+              const res = await github.graphql(q, { o: owner, r: repo, c: cursor });
+              const page = res.repository.issues;
+              for (const i of page.nodes) {
+                const f = {};
+                for (const v of i.issueFieldValues.nodes) if (v.field?.name) f[v.field.name] = v.value ?? v.name;
+                const nc = f['Nonconformity'];
+                const isNc = i.issueType?.name === 'Bug' && !!nc && nc !== 'No';
+                const overdue = isNc && !!f['Target date'] && f['Target date'] < today;
+                // The label is only a flag: take it off when the issue is no longer an overdue nonconformity.
+                if (!overdue && i.labels.nodes.some(l => l.name === 'nc-overdue')) {
+                  try {
+                    await github.rest.issues.removeLabel({ owner, repo, issue_number: i.number, name: 'nc-overdue' });
+                  } catch (e) { if (e.status !== 404) throw e; }
+                }
+                if (!isNc) continue;
+                const major = nc === 'P1';
+                if (!major && !overdue) continue;
+                const WHO = escalateTo(i.assignees.nodes.map(a => a.login));
+                // The escalation comment is the record that it was sent; the label is only a visible flag.
+                // Comment first, label second: if labelling fails, the next run adds it without commenting again.
+                const comments = await github.paginate(github.rest.issues.listComments,
+                  { owner, repo, issue_number: i.number, per_page: 100 });
+                // Only a marker written by this workflow counts; anyone else pasting it changes nothing.
+                const sent = (m) => comments.some(c => c.user?.type === 'Bot' && c.user?.login === 'github-actions[bot]' && (c.body || '').includes(m));
+                if (major && !sent(MAJOR)) {
+                  await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
+                    body: `${MAJOR}\n${WHO}: this bug is a high-severity nonconformity and is still open (SDLC Policy, section 6.3).` });
+                }
+                if (overdue) {
+                  if (!sent(OVERDUE)) {
+                    await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
+                      body: `${OVERDUE}\n${WHO}: this nonconformity passed its Target date (${f['Target date']}) and is still open (SDLC Policy, section 6.3).` });
+                  }
+                  await github.rest.issues.addLabels({ owner, repo, issue_number: i.number, labels: ['nc-overdue'] });
+                }
+              }
+              cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+            } while (cursor);

@@ -8,6 +8,9 @@ uses [Semantic Versioning](https://semver.org/) (0.x: APIs may change in minor v
 
 ### Added
 
+- A Nonconformity check workflow: a bug marked as a nonconformity cannot
+  close without its root cause and corrective action, and overdue or P1
+  nonconformities are escalated each weekday.
 - A privacy policy, [PRIVACY.md](PRIVACY.md): nothing is sent to the
   maintainers; run results stay on your machine; the services flowreel
   connects to. The plugin links it (`privacyPolicyUrl`) and its README has
