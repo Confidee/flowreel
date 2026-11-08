@@ -18,8 +18,8 @@
 # Pinned copy of the reusable workflow
 #   org-workflows/.github/workflows/nonconformity-check.yml
 # (the organization's private shared-workflows repository), commit
-# 98ac6c480f83e46aeff34ef9e3c3e1efebb46f20
-# (the head of the open PR branch; updated after that PR merges). This
+# 08316249ecc4ae8cc4bfde0773771cfecb65bca1
+# (the merge commit of the PR that added it). This
 # repository is public and cannot call a private reusable workflow, so the
 # logic is copied and the triggers and logins are set inline. Update it by hand
 # when the source changes.
