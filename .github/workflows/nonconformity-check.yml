@@ -1,6 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+#
 # Nonconformity bugs (SDLC Policy section 6, ISO 27001 clause 10.2).
 # - Ordinary bugs are not checked: an empty Nonconformity field counts as "No".
-# - A bug marked "Yes – minor" or "Yes – major" cannot be closed as completed
+# - A bug marked P2 (minor) or P1 (major) cannot be closed as completed
 #   without an assignee (owner), Root cause, Target date and a corrective action;
 #   it is reopened with a comment saying what is missing (sections 6.2 and 6.3).
 #   The corrective action is the "Corrective action" field; failing that, the
@@ -9,16 +11,18 @@
 # - When such a PR is merged, its Corrective action section is copied to the bug
 #   as a comment, so the bug holds the record.
 # - Every weekday, open nonconformities that are overdue, or high severity
-#   ("Yes – major"), are escalated (section 6.3): to the Senior Software Engineer,
+#   (P1, major), are escalated (section 6.3): to the Senior Software Engineer,
 #   or to the CIO when the Senior Software Engineer is the assignee. Overdue ones
 #   also get the label nc-overdue.
 #
 # Pinned copy of the reusable workflow
-#   Confidee/org-workflows/.github/workflows/nonconformity-check.yml
-# at commit f4d6bc5f8593128f059da8e2bc250b8d92fe51c2 (the head of the PR branch
-# feature/nonconformity-check; updated after that PR merges). This repository is
-# public and cannot call a private reusable workflow, so the logic is copied and
-# the triggers and logins are set inline. Update it by hand when the source changes.
+#   org-workflows/.github/workflows/nonconformity-check.yml
+# (the organization's private shared-workflows repository), commit
+# eefcfc6446c452dcf73f010810a3b1ffa0d8dfcb
+# (the head of the open PR branch; updated after that PR merges). This
+# repository is public and cannot call a private reusable workflow, so the
+# logic is copied and the triggers and logins are set inline. Update it by hand
+# when the source changes.
 name: Nonconformity check
 
 on:
@@ -155,7 +159,7 @@ jobs:
                 for (const v of i.issueFieldValues.nodes) if (v.field?.name) f[v.field.name] = v.value ?? v.name;
                 const nc = f['Nonconformity'];
                 if (!nc || nc === 'No') continue;
-                const major = nc === 'Yes – major';
+                const major = nc === 'P1';
                 const overdue = !!f['Target date'] && f['Target date'] < today;
                 if (!major && !overdue) continue;
                 const WHO = escalateTo(i.assignees.nodes.map(a => a.login));
