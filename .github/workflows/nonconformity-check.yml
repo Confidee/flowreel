@@ -18,7 +18,7 @@
 # Pinned copy of the reusable workflow
 #   org-workflows/.github/workflows/nonconformity-check.yml
 # (the organization's private shared-workflows repository), commit
-# eefcfc6446c452dcf73f010810a3b1ffa0d8dfcb
+# 98ac6c480f83e46aeff34ef9e3c3e1efebb46f20
 # (the head of the open PR branch; updated after that PR merges). This
 # repository is public and cannot call a private reusable workflow, so the
 # logic is copied and the triggers and logins are set inline. Update it by hand
@@ -48,12 +48,12 @@ jobs:
           script: |
             const section = (body) => {
               const m = (body || '').replace(/\r\n/g, '\n').match(/^#{2,3}[ \t]*Corrective action[^\n]*\n([\s\S]*?)(?=^#{1,3}[ \t]|(?![\s\S]))/im);
-              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').trim() : '';
+              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '&lt;!--').trim() : '';
             };
             const q = `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){
               issueType{name}
               assignees(first:1){totalCount}
-              closedByPullRequestsReferences(first:10,includeClosedPrs:true){nodes{merged body}}
+              closedByPullRequestsReferences(first:50,includeClosedPrs:true){nodes{merged body}}
               issueFieldValues(first:20){nodes{
                 ... on IssueFieldTextValue{value field{... on IssueFieldText{name}}}
                 ... on IssueFieldSingleSelectValue{name field{... on IssueFieldSingleSelect{name}}}
@@ -78,7 +78,12 @@ jobs:
             if (!fromField && !fromPr) {
               const comments = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: n, per_page: 100 });
-              fromComment = comments.some(c => /^\s*(<!--[\s\S]*?-->\s*)?\**Corrective action/i.test(c.body || ''));
+              // A comment counts only with text after the heading; a bare "Corrective action" does not.
+              const hasAction = (b) => {
+                const m = (b || '').match(/^\s*(?:<!--[\s\S]*?-->\s*)?\**Corrective action\**[ \t]*:?\**[ \t]*(?:\(from PR #\d+\))?\**:?([\s\S]*)$/i);
+                return !!m && m[1].replace(/<!--[\s\S]*?-->/g, '').trim().length > 0;
+              };
+              fromComment = comments.some(c => hasAction(c.body));
             }
             if (!fromField && !fromPr && !fromComment) missing.push('Corrective action');
             if (!missing.length) return;
@@ -95,14 +100,14 @@ jobs:
           script: |
             const section = (body) => {
               const m = (body || '').replace(/\r\n/g, '\n').match(/^#{2,3}[ \t]*Corrective action[^\n]*\n([\s\S]*?)(?=^#{1,3}[ \t]|(?![\s\S]))/im);
-              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').trim() : '';
+              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '&lt;!--').trim() : '';
             };
             const pr = context.payload.pull_request;
             const text = section(pr.body);
             if (!text) return;
             const { owner, repo } = context.repo;
             const q = `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-              closingIssuesReferences(first:10){nodes{number repository{nameWithOwner} issueType{name}
+              closingIssuesReferences(first:50){nodes{number repository{nameWithOwner} issueType{name}
                 issueFieldValues(first:20){nodes{
                   ... on IssueFieldSingleSelectValue{name field{... on IssueFieldSingleSelect{name}}}
                 }}}}}}}`;
@@ -115,7 +120,7 @@ jobs:
               if (nc === 'No') continue;
               const comments = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: i.number, per_page: 100 });
-              if (comments.some(c => c.user?.login === 'github-actions[bot]' && (c.body || '').includes(MARKER))) continue;
+              if (comments.some(c => c.user?.type === 'Bot' && c.user?.login === 'github-actions[bot]' && (c.body || '').includes(MARKER))) continue;
               await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
                 body: `${MARKER}\n**Corrective action** (from PR #${pr.number}):\n\n${text}` });
             }
@@ -144,7 +149,7 @@ jobs:
             const MAJOR = '<!-- nc-major-escalation -->';
             const q = `query($o:String!,$r:String!,$c:String){repository(owner:$o,name:$r){issues(states:OPEN,first:100,after:$c){
               pageInfo{hasNextPage endCursor}
-              nodes{number issueType{name} assignees(first:10){nodes{login}}
+              nodes{number issueType{name} labels(first:50){nodes{name}} assignees(first:10){nodes{login}}
                 issueFieldValues(first:20){nodes{
                   ... on IssueFieldSingleSelectValue{name field{... on IssueFieldSingleSelect{name}}}
                   ... on IssueFieldDateValue{value field{... on IssueFieldDate{name}}}
@@ -154,13 +159,19 @@ jobs:
               const res = await github.graphql(q, { o: owner, r: repo, c: cursor });
               const page = res.repository.issues;
               for (const i of page.nodes) {
-                if (i.issueType?.name !== 'Bug') continue;
                 const f = {};
                 for (const v of i.issueFieldValues.nodes) if (v.field?.name) f[v.field.name] = v.value ?? v.name;
                 const nc = f['Nonconformity'];
-                if (!nc || nc === 'No') continue;
+                const isNc = i.issueType?.name === 'Bug' && !!nc && nc !== 'No';
+                const overdue = isNc && !!f['Target date'] && f['Target date'] < today;
+                // The label is only a flag: take it off when the issue is no longer an overdue nonconformity.
+                if (!overdue && i.labels.nodes.some(l => l.name === 'nc-overdue')) {
+                  try {
+                    await github.rest.issues.removeLabel({ owner, repo, issue_number: i.number, name: 'nc-overdue' });
+                  } catch (e) { if (e.status !== 404) throw e; }
+                }
+                if (!isNc) continue;
                 const major = nc === 'P1';
-                const overdue = !!f['Target date'] && f['Target date'] < today;
                 if (!major && !overdue) continue;
                 const WHO = escalateTo(i.assignees.nodes.map(a => a.login));
                 // The escalation comment is the record that it was sent; the label is only a visible flag.
@@ -168,7 +179,7 @@ jobs:
                 const comments = await github.paginate(github.rest.issues.listComments,
                   { owner, repo, issue_number: i.number, per_page: 100 });
                 // Only a marker written by this workflow counts; anyone else pasting it changes nothing.
-                const sent = (m) => comments.some(c => c.user?.login === 'github-actions[bot]' && (c.body || '').includes(m));
+                const sent = (m) => comments.some(c => c.user?.type === 'Bot' && c.user?.login === 'github-actions[bot]' && (c.body || '').includes(m));
                 if (major && !sent(MAJOR)) {
                   await github.rest.issues.createComment({ owner, repo, issue_number: i.number,
                     body: `${MAJOR}\n${WHO}: this bug is a high-severity nonconformity and is still open (SDLC Policy, section 6.3).` });
