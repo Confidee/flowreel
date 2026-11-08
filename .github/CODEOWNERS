@@ -1,0 +1,7 @@
+# CODEOWNERS for flowreel
+#
+# Review requests go to the maintainers for every path.
+
+* @fetijashari @robkurti
+
+/.github/ @fetijashari @robkurti
